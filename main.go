@@ -7,6 +7,7 @@ package main
 import (
 	"compress/bzip2"
 	"embed"
+	"fmt"
 	"io"
 )
 
@@ -24,5 +25,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	_ = data
+	symbols, s := make(map[rune]int), 0
+	for _, v := range string(data) {
+		if _, has := symbols[v]; !has {
+			symbols[v] = s
+			s++
+		}
+	}
+	fmt.Println(s)
 }
