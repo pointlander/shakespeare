@@ -92,7 +92,7 @@ func main() {
 		input := others.ByName["input"]
 		input.X = input.X[:cap(input.X)]
 		l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-		l1 := tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1"))
+		l1 := tf32.TanH(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
 		type Path struct {
 			Path string
 			Cost float32
@@ -152,7 +152,7 @@ func main() {
 		return
 	}
 
-	//in = in[:32*1024]
+	in = in[:2*1024*1024]
 	type Vector struct {
 		Vector [InputSize]float32
 		Symbol byte
@@ -174,9 +174,9 @@ func main() {
 		m.Add(v)
 	}
 	set := tf32.NewSet()
-	set.Add("w", 8*256, 4*len(symbols))
-	set.Add("b", 4*len(symbols))
-	set.Add("w1", 4*len(symbols), len(symbols))
+	set.Add("w", 8*256, 32*len(symbols))
+	set.Add("b", 32*len(symbols))
+	set.Add("w1", 32*len(symbols), len(symbols))
 	set.Add("b1", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
@@ -198,7 +198,7 @@ func main() {
 		}
 	}
 	l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-	l1 := tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1"))
+	l1 := tf32.TanH(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
 	loss := tf32.Avg(tf32.Quadratic(l1, others.Get("output")))
 	const iterations = 3 * 60 * 1024
 	cost := float32(0.0)
