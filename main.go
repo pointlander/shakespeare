@@ -26,7 +26,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.89
 	// Eta is the learning rate
-	Eta = 1.0e-3
+	Eta = 1.0e-4
 )
 
 const (
@@ -36,6 +36,13 @@ const (
 	StateV
 	// StateTotal is the total number of states
 	StateTotal
+)
+
+const (
+	// InputSize is the size of the input
+	InputSize = Size * 256
+	// BatchSize is the size of a batch
+	BatchSize = 100
 )
 
 func main() {
@@ -60,9 +67,9 @@ func main() {
 	}
 	fmt.Println(s)
 
-	in = in[:8*1024]
+	in = in[:32*1024]
 	type Vector struct {
-		Vector []float32
+		Vector [InputSize]float32
 		Symbol byte
 	}
 	mind, index := make([]Vector, len(in)), 0
@@ -70,25 +77,22 @@ func main() {
 	m.Add(0)
 
 	others := tf32.NewSet()
-	others.Add("input", 8*256, len(in))
-	others.Add("output", len(symbols), len(in))
+	others.Add("input", 8*256, BatchSize)
+	others.Add("output", len(symbols), BatchSize)
 	input, output := others.ByName["input"], others.ByName["output"]
+	input.X = input.X[:cap(input.X)]
+	output.X = output.X[:cap(output.X)]
 	for _, v := range in {
 		index = (index + 1) % len(mind)
-		vectors := m.Mix()
-		mind[index].Vector = vectors.Data
+		mind[index].Vector = m.Mix()
 		mind[index].Symbol = v
-		input.X = append(input.X, vectors.Data...)
-		out := make([]float32, len(symbols))
-		out[v] = 1
-		output.X = append(output.X, out...)
 		m.Add(v)
 	}
 	rng := rand.New(rand.NewSource(1))
 	set := tf32.NewSet()
-	set.Add("w", 8*256, len(symbols))
-	set.Add("b", len(symbols))
-	set.Add("w1", len(symbols), len(symbols))
+	set.Add("w", 8*256, 4*len(symbols))
+	set.Add("b", 4*len(symbols))
+	set.Add("w1", 4*len(symbols), len(symbols))
 	set.Add("b1", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
@@ -112,13 +116,22 @@ func main() {
 	l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
 	l1 := tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1"))
 	loss := tf32.Avg(tf32.Quadratic(l1, others.Get("output")))
-	for i := 0; i < 256; i++ {
+	for i := 0; i < 1024; i++ {
 		pow := func(x float32) float32 {
 			y := math.Pow(float64(x), float64(i+1))
 			if math.IsNaN(y) || math.IsInf(y, 0) {
 				return 0
 			}
 			return float32(y)
+		}
+
+		for j := 0; j < BatchSize; j++ {
+			vector := mind[rng.Intn(len(mind))]
+			copy(input.X[j*8*256:(j+1)*8*256], vector.Vector[:])
+			for k := 0; k < len(symbols); k++ {
+				output.X[j*len(symbols)+k] = 0
+			}
+			output.X[j*len(symbols)+int(vector.Symbol)] = 1
 		}
 
 		others.Zero()
@@ -182,9 +195,7 @@ func main() {
 			cp := m.Copy()
 			for {
 				q := cp.Mix()
-				for i, v := range q.Data {
-					input.X[i] = v
-				}
+				copy(input.X, q[:])
 				max, symbol := float32(0.0), 0
 				l1(func(a *tf32.V) bool {
 					sum := float32(0.0)

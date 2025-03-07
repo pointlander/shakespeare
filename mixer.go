@@ -86,7 +86,7 @@ func (m *Mixer) Add(s byte) {
 }
 
 // Mix mixes the histograms outputting a matrix
-func (m Mixer) Mix() Matrix {
+func (m Mixer) Mix() [InputSize]float32 {
 	x := NewMatrix(256, Size)
 	for i := range m.Histograms {
 		sum := float32(0.0)
