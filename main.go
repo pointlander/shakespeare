@@ -51,6 +51,71 @@ var (
 	FlagInfer = flag.String("infer", "", "inference mode")
 )
 
+// Quadratic computes the quadratic cost of two tensors
+func Quadratic(k tf32.Continuation, node int, a, b *tf32.V, options ...map[string]interface{}) bool {
+	if len(a.S) != 2 || len(b.S) != 2 {
+		panic("tensor needs to have two dimensions")
+	}
+	width := a.S[0]
+	if width != b.S[0] || a.S[1] != b.S[1] {
+		panic("dimensions are not the same")
+	}
+	c, size := tf32.NewV(a.S[1]), len(a.X)
+	stddevs := []float32{}
+	targets := []int{}
+	for i := 0; i < size; i += width {
+		av, bv, sum := a.X[i:i+width], b.X[i:i+width], float32(0.0)
+		index := 0
+		for j, bx := range bv {
+			if bx == 1 {
+				index = j
+				break
+			}
+		}
+		avg := float32(0.0)
+		for _, ax := range av {
+			avg += ax
+		}
+		avg /= float32(len(av))
+		stddev := float32(0.0)
+		for _, ax := range av {
+			diff := ax - avg
+			stddev += diff * diff
+		}
+		stddev = float32(math.Sqrt(float64(stddev) / float64(len(av))))
+		target := av[index]
+		targets = append(targets, index)
+		stddevs = append(stddevs, stddev)
+		for j, ax := range av {
+			p := (ax - (target - stddev))
+			if j == index {
+				p = (ax - target)
+			}
+			sum += p * p
+		}
+		c.X = append(c.X, .5*sum)
+	}
+	if k(&c) {
+		return true
+	}
+	index := 0
+	for i := 0; i < size; i += width {
+		av, ad, bd, d := a.X[i:i+width], a.D[i:i+width], b.D[i:i+width], c.D[index]
+		target := av[targets[index]]
+		stddev := stddevs[index]
+		for j, ax := range av {
+			b := target - stddev
+			if j == targets[index] {
+				b = target
+			}
+			ad[j] += (ax - b) * d
+			bd[j] += (b - ax) * d
+		}
+		index++
+	}
+	return false
+}
+
 func main() {
 	flag.Parse()
 
@@ -121,10 +186,19 @@ func main() {
 							symbol = i
 							break
 						}
-						/*if v > max {
-							max, symbol = v, is[i]
-						}*/
 					}
+					/*cp := make([]float32, len(a.X))
+					copy(cp, a.X)
+					softmax(cp)
+					selection, total := rng.Float32(), float32(0.0)
+					for i, v := range cp {
+						total += v
+						if selection < total {
+							cost += v
+							symbol = i
+							break
+						}
+					}*/
 					return true
 				})
 				_ = max
@@ -153,7 +227,8 @@ func main() {
 		return
 	}
 
-	in = in[:2*1024*1024]
+	//in = in[:2*1024*1024]
+	in = in[:32*1024]
 	type Vector struct {
 		Vector [InputSize]float32
 		Symbol byte
@@ -200,11 +275,12 @@ func main() {
 			w.States[i] = make([]float32, len(w.X))
 		}
 	}
+	//quadratic := tf32.B(Quadratic)
 	l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
 	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
 	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
-	const iterations = 3 * 60 * 1024
+	const iterations = /* 3 * 60 * */ 1024
 	cost := float32(0.0)
 	for i := 0; i < iterations; i++ {
 		pow := func(x float32) float32 {
