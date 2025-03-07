@@ -92,7 +92,8 @@ func main() {
 		input := others.ByName["input"]
 		input.X = input.X[:cap(input.X)]
 		l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-		l1 := tf32.TanH(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
+		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
+		l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
 		type Path struct {
 			Path string
 			Cost float32
@@ -107,7 +108,7 @@ func main() {
 				q := cp.Mix()
 				copy(input.X, q[:])
 				max, symbol := float32(0.0), 0
-				l1(func(a *tf32.V) bool {
+				l2(func(a *tf32.V) bool {
 					sum := float32(0.0)
 					for _, v := range a.X {
 						sum += v
@@ -174,10 +175,12 @@ func main() {
 		m.Add(v)
 	}
 	set := tf32.NewSet()
-	set.Add("w", 8*256, 32*len(symbols))
-	set.Add("b", 32*len(symbols))
-	set.Add("w1", 32*len(symbols), len(symbols))
-	set.Add("b1", len(symbols))
+	set.Add("w", 8*256, 8*len(symbols))
+	set.Add("b", 8*len(symbols))
+	set.Add("w1", 8*len(symbols), 8*len(symbols))
+	set.Add("b1", 8*len(symbols))
+	set.Add("w2", 8*len(symbols), len(symbols))
+	set.Add("b2", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
@@ -198,8 +201,9 @@ func main() {
 		}
 	}
 	l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-	l1 := tf32.TanH(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
-	loss := tf32.Avg(tf32.Quadratic(l1, others.Get("output")))
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
+	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
+	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
 	const iterations = 3 * 60 * 1024
 	cost := float32(0.0)
 	for i := 0; i < iterations; i++ {
