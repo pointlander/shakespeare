@@ -255,9 +255,9 @@ func main() {
 		m.Add(v)
 	}
 	set := tf32.NewSet()
-	set.Add("w0", 8*256, 8*len(symbols))
-	set.Add("b0", 8*len(symbols))
-	set.Add("w1", 8*len(symbols), 8*len(symbols))
+	set.Add("w0", 8*256, 16*len(symbols))
+	set.Add("b0", 16*len(symbols))
+	set.Add("w1", 16*len(symbols), 8*len(symbols))
 	set.Add("b1", 8*len(symbols))
 	set.Add("w2", 8*len(symbols), 8*len(symbols))
 	set.Add("b2", 8*len(symbols))
@@ -288,7 +288,7 @@ func main() {
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 	l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
 	loss := tf32.Avg(tf32.Quadratic(l3, others.Get("output")))
-	iterations := 3 * 60 * 1024
+	iterations := 6 * 60 * 1024
 	if *FlagSmall {
 		iterations = 1024
 	}
