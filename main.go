@@ -166,67 +166,63 @@ func main() {
 			Path string
 			Cost float32
 		}
-		paths := make([]Path, 0, 8)
-		for j := 0; j < 256; j++ {
-			query := ""
-			cost := float32(0.0)
-			i := 0
-			cp := m.Copy()
-			for {
-				q := cp.Mix()
-				copy(input.X, q[:])
-				max, symbol := float32(0.0), 0
-				l3(func(a *tf32.V) bool {
-					sum := float32(0.0)
-					for _, v := range a.X {
-						sum += v
-					}
-					selection, total := rng.Float32(), float32(0.0)
-					for i, v := range a.X {
-						total += v / sum
-						if selection < total {
-							cost += v / sum
-							symbol = i
-							break
+		best := ""
+		for i := 0; i < 8; i++ {
+			paths := make([]Path, 0, 8)
+			for j := 0; j < 8*1024; j++ {
+				query := ""
+				cost := float32(0.0)
+				cp := m.Copy()
+				for l := 0; l < 32; l++ {
+					q := cp.Mix()
+					copy(input.X, q[:])
+					max, symbol := float32(0.0), 0
+					l3(func(a *tf32.V) bool {
+						sum := float32(0.0)
+						for _, v := range a.X {
+							sum += v
 						}
-					}
-					/*cp := make([]float32, len(a.X))
-					copy(cp, a.X)
-					softmax(cp)
-					selection, total := rng.Float32(), float32(0.0)
-					for i, v := range cp {
-						total += v
-						if selection < total {
-							cost += v
-							symbol = i
-							break
+						selection, total := rng.Float32(), float32(0.0)
+						for i, v := range a.X {
+							total += v / sum
+							if selection < total {
+								cost += v / sum
+								symbol = i
+								break
+							}
 						}
-					}*/
-					return true
+						/*cp := make([]float32, len(a.X))
+						copy(cp, a.X)
+						softmax(cp)
+						selection, total := rng.Float32(), float32(0.0)
+						for i, v := range cp {
+							total += v
+							if selection < total {
+								cost += v
+								symbol = i
+								break
+							}
+						}*/
+						return true
+					})
+					_ = max
+					query += fmt.Sprintf("%c", isymbols[symbol])
+					cp.Add(byte(symbol))
+				}
+				paths = append(paths, Path{
+					Path: query,
+					Cost: cost,
 				})
-				_ = max
-				query += fmt.Sprintf("%c", isymbols[symbol])
-				cp.Add(byte(symbol))
-				i++
-				if i >= 128 && (symbol == '.' || symbol == '!' || symbol == '?') {
-					break
-				}
-				if i >= 1024 {
-					break
-				}
 			}
-			paths = append(paths, Path{
-				Path: query,
-				Cost: cost,
+			for i := range paths {
+				paths[i].Cost /= float32(len(paths[i].Path))
+			}
+			sort.Slice(paths, func(i, j int) bool {
+				return paths[i].Cost > paths[j].Cost
 			})
+			best += paths[0].Path
 		}
-		for i := range paths {
-			paths[i].Cost /= float32(len(paths[i].Path))
-		}
-		sort.Slice(paths, func(i, j int) bool {
-			return paths[i].Cost > paths[j].Cost
-		})
-		fmt.Printf(paths[0].Path)
+		fmt.Printf(best)
 		return
 	}
 
