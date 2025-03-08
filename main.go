@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -154,65 +155,89 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		others := tf32.NewSet()
-		others.Add("input", 8*256, 1)
-		input := others.ByName["input"]
-		input.X = input.X[:cap(input.X)]
-		l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
-		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
-		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
-		l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
 		type Path struct {
 			Path string
 			Cost float32
 		}
+		done := make(chan Path, 8)
+		process := func(seed int64) {
+			rng := rand.New(rand.NewSource(seed))
+			others := tf32.NewSet()
+			others.Add("input", 8*256, 1)
+			input := others.ByName["input"]
+			input.X = input.X[:cap(input.X)]
+			l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+			l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+			l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+			l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
+
+			query := ""
+			cost := float32(0.0)
+			cp := m.Copy()
+			for l := 0; l < 32; l++ {
+				q := cp.Mix()
+				copy(input.X, q[:])
+				max, symbol := float32(0.0), 0
+				l3(func(a *tf32.V) bool {
+					sum := float32(0.0)
+					for _, v := range a.X {
+						sum += v
+					}
+					selection, total := rng.Float32(), float32(0.0)
+					for i, v := range a.X {
+						total += v / sum
+						if selection < total {
+							cost += v / sum
+							symbol = i
+							break
+						}
+					}
+					/*cp := make([]float32, len(a.X))
+					copy(cp, a.X)
+					softmax(cp)
+					selection, total := rng.Float32(), float32(0.0)
+					for i, v := range cp {
+						total += v
+						if selection < total {
+							cost += v
+							symbol = i
+							break
+						}
+					}*/
+					return true
+				})
+				_ = max
+				query += fmt.Sprintf("%c", isymbols[symbol])
+				cp.Add(byte(symbol))
+			}
+			done <- Path{
+				Path: query,
+				Cost: cost,
+			}
+		}
+		const space = 8 * 1024
 		best := ""
+		cpus := runtime.NumCPU()
 		for i := 0; i < 8; i++ {
 			paths := make([]Path, 0, 8)
-			for j := 0; j < 8*1024; j++ {
-				query := ""
-				cost := float32(0.0)
-				cp := m.Copy()
-				for l := 0; l < 32; l++ {
-					q := cp.Mix()
-					copy(input.X, q[:])
-					max, symbol := float32(0.0), 0
-					l3(func(a *tf32.V) bool {
-						sum := float32(0.0)
-						for _, v := range a.X {
-							sum += v
-						}
-						selection, total := rng.Float32(), float32(0.0)
-						for i, v := range a.X {
-							total += v / sum
-							if selection < total {
-								cost += v / sum
-								symbol = i
-								break
-							}
-						}
-						/*cp := make([]float32, len(a.X))
-						copy(cp, a.X)
-						softmax(cp)
-						selection, total := rng.Float32(), float32(0.0)
-						for i, v := range cp {
-							total += v
-							if selection < total {
-								cost += v
-								symbol = i
-								break
-							}
-						}*/
-						return true
-					})
-					_ = max
-					query += fmt.Sprintf("%c", isymbols[symbol])
-					cp.Add(byte(symbol))
-				}
-				paths = append(paths, Path{
-					Path: query,
-					Cost: cost,
-				})
+			j, flight := 0, 0
+			for j < space && flight < cpus {
+				go process(rng.Int63())
+				flight++
+				j++
+			}
+			for j < space {
+				path := <-done
+				paths = append(paths, path)
+				flight--
+
+				go process(rng.Int63())
+				flight++
+				j++
+			}
+			for k := 0; k < flight; k++ {
+				path := <-done
+				paths = append(paths, path)
 			}
 			for i := range paths {
 				paths[i].Cost /= float32(len(paths[i].Path))
@@ -221,6 +246,7 @@ func main() {
 				return paths[i].Cost > paths[j].Cost
 			})
 			best += paths[0].Path
+			fmt.Println(paths[0].Cost)
 			for _, v := range []rune(paths[0].Path) {
 				m.Add(byte(symbols[v]))
 			}
