@@ -221,6 +221,9 @@ func main() {
 				return paths[i].Cost > paths[j].Cost
 			})
 			best += paths[0].Path
+			for _, v := range []rune(paths[0].Path) {
+				m.Add(byte(symbols[v]))
+			}
 		}
 		fmt.Printf(best)
 		return
