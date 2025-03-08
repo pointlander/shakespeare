@@ -158,15 +158,16 @@ func main() {
 		others.Add("input", 8*256, 1)
 		input := others.ByName["input"]
 		input.X = input.X[:cap(input.X)]
-		l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
-		l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
+		l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+		l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
 		type Path struct {
 			Path string
 			Cost float32
 		}
 		paths := make([]Path, 0, 8)
-		for j := 0; j < 128; j++ {
+		for j := 0; j < 256; j++ {
 			query := ""
 			cost := float32(0.0)
 			i := 0
@@ -175,7 +176,7 @@ func main() {
 				q := cp.Mix()
 				copy(input.X, q[:])
 				max, symbol := float32(0.0), 0
-				l2(func(a *tf32.V) bool {
+				l3(func(a *tf32.V) bool {
 					sum := float32(0.0)
 					for _, v := range a.X {
 						sum += v
@@ -255,12 +256,14 @@ func main() {
 		m.Add(v)
 	}
 	set := tf32.NewSet()
-	set.Add("w", 8*256, 8*len(symbols))
-	set.Add("b", 8*len(symbols))
+	set.Add("w0", 8*256, 8*len(symbols))
+	set.Add("b0", 8*len(symbols))
 	set.Add("w1", 8*len(symbols), 8*len(symbols))
 	set.Add("b1", 8*len(symbols))
-	set.Add("w2", 8*len(symbols), len(symbols))
-	set.Add("b2", len(symbols))
+	set.Add("w2", 8*len(symbols), 8*len(symbols))
+	set.Add("b2", 8*len(symbols))
+	set.Add("w3", 8*len(symbols), len(symbols))
+	set.Add("b3", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
@@ -281,10 +284,11 @@ func main() {
 		}
 	}
 	//quadratic := tf32.B(Quadratic)
-	l := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w"), others.Get("input")), set.Get("b")))
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
-	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
-	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
+	l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+	l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
+	loss := tf32.Avg(tf32.Quadratic(l3, others.Get("output")))
 	iterations := 3 * 60 * 1024
 	if *FlagSmall {
 		iterations = 1024
