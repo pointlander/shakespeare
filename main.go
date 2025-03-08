@@ -49,6 +49,8 @@ const (
 var (
 	// FlagInfer run the model in inference mode
 	FlagInfer = flag.String("infer", "", "inference mode")
+	/// FlagSmall is small mode
+	FlagSmall = flag.Bool("small", false, "small mode")
 )
 
 // Quadratic computes the quadratic cost of two tensors
@@ -227,8 +229,11 @@ func main() {
 		return
 	}
 
-	//in = in[:2*1024*1024]
-	in = in[:32*1024]
+	if *FlagSmall {
+		in = in[:32*1024]
+	} else {
+		in = in[:2*1024*1024]
+	}
 	type Vector struct {
 		Vector [InputSize]float32
 		Symbol byte
@@ -280,7 +285,10 @@ func main() {
 	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l), set.Get("b1")))
 	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
-	const iterations = /* 3 * 60 * */ 1024
+	iterations := 3 * 60 * 1024
+	if *FlagSmall {
+		iterations = 1024
+	}
 	cost := float32(0.0)
 	for i := 0; i < iterations; i++ {
 		pow := func(x float32) float32 {
