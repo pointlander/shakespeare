@@ -166,9 +166,9 @@ func main() {
 			others.Add("input", 8*256, 1)
 			input := others.ByName["input"]
 			input.X = input.X[:cap(input.X)]
-			l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
-			l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
-			l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+			l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+			l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+			l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 			l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
 
 			query := ""
@@ -281,13 +281,13 @@ func main() {
 		m.Add(v)
 	}
 	set := tf32.NewSet()
-	set.Add("w0", 8*256, 16*len(symbols))
-	set.Add("b0", 16*len(symbols))
+	set.Add("w0", 8*256, 8*len(symbols))
+	set.Add("b0", 8*len(symbols))
 	set.Add("w1", 16*len(symbols), 8*len(symbols))
 	set.Add("b1", 8*len(symbols))
-	set.Add("w2", 8*len(symbols), 8*len(symbols))
+	set.Add("w2", 16*len(symbols), 8*len(symbols))
 	set.Add("b2", 8*len(symbols))
-	set.Add("w3", 8*len(symbols), len(symbols))
+	set.Add("w3", 16*len(symbols), len(symbols))
 	set.Add("b3", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
@@ -309,12 +309,12 @@ func main() {
 		}
 	}
 	//quadratic := tf32.B(Quadratic)
-	l0 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
-	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 	l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
 	loss := tf32.Avg(tf32.Quadratic(l3, others.Get("output")))
-	iterations := 6 * 60 * 1024
+	iterations := 3 * 60 * 1024
 	if *FlagSmall {
 		iterations = 1024
 	}
