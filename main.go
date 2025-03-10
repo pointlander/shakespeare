@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -48,6 +49,8 @@ const (
 )
 
 var (
+	// FlagVectors build vector db
+	FlagVectors = flag.Bool("vectors", false, "build vector db")
 	// FlagInfer run the model in inference mode
 	FlagInfer = flag.String("infer", "", "inference mode")
 	/// FlagSmall is small mode
@@ -169,7 +172,8 @@ func main() {
 			l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
 			l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 			l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
-			l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
+			l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+			l4 := tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4"))
 
 			query := ""
 			cost := float32(0.0)
@@ -178,7 +182,7 @@ func main() {
 				q := cp.Mix()
 				copy(input.X, q[:])
 				max, symbol := float32(0.0), 0
-				l3(func(a *tf32.V) bool {
+				l4(func(a *tf32.V) bool {
 					sum := float32(0.0)
 					for _, v := range a.X {
 						sum += v
@@ -257,16 +261,78 @@ func main() {
 
 	if *FlagSmall {
 		in = in[:32*1024]
-	} else {
-		in = in[:2*1024*1024]
 	}
+
+	if *FlagVectors {
+		db, err := os.Create("vectors.bin")
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+
+		m := NewMixer()
+		m.Add(0)
+		buffer32 := make([]byte, 4)
+		for i, v := range in {
+			vector := m.Mix()
+			for _, v := range vector {
+				bits := math.Float32bits(v)
+				for i := range buffer32 {
+					buffer32[i] = byte((bits >> (8 * i)) & 0xFF)
+				}
+				n, err := db.Write(buffer32)
+				if err != nil {
+					panic(err)
+				}
+				if n != len(buffer32) {
+					panic("4 bytes should be been written")
+				}
+			}
+			n, err := db.Write(in[i : i+1])
+			if err != nil {
+				panic(err)
+			}
+			if n != 1 {
+				panic("1 bytes should be been written")
+			}
+			m.Add(v)
+		}
+		return
+	}
+
 	type Vector struct {
 		Vector [InputSize]float32
 		Symbol byte
 	}
-	mind, index := make([]Vector, len(in)), 0
-	m := NewMixer()
-	m.Add(0)
+	vectors, err := os.Open("vectors.bin")
+	if err != nil {
+		panic(err)
+	}
+	defer vectors.Close()
+	get := func(i int) Vector {
+		_, err := vectors.Seek(int64((InputSize*4+1)*i), io.SeekStart)
+		if err != nil {
+			panic(err)
+		}
+		vector := Vector{}
+		buffer := make([]byte, InputSize*4+1)
+		n, err := vectors.Read(buffer)
+		if err != nil {
+			panic(err)
+		}
+		if n != len(buffer) {
+			panic(fmt.Sprintf("%d bytes should have been read", len(buffer)))
+		}
+		for k := range vector.Vector {
+			var bits uint32
+			for l := 0; l < 4; l++ {
+				bits |= uint32(buffer[4*k+l]) << (8 * l)
+			}
+			vector.Vector[k] = math.Float32frombits(bits)
+		}
+		vector.Symbol = buffer[len(buffer)-1]
+		return vector
+	}
 
 	others := tf32.NewSet()
 	others.Add("input", 8*256, BatchSize)
@@ -274,12 +340,6 @@ func main() {
 	input, output := others.ByName["input"], others.ByName["output"]
 	input.X = input.X[:cap(input.X)]
 	output.X = output.X[:cap(output.X)]
-	for _, v := range in {
-		index = (index + 1) % len(mind)
-		mind[index].Vector = m.Mix()
-		mind[index].Symbol = v
-		m.Add(v)
-	}
 	set := tf32.NewSet()
 	set.Add("w0", 8*256, 8*len(symbols))
 	set.Add("b0", 8*len(symbols))
@@ -287,8 +347,10 @@ func main() {
 	set.Add("b1", 8*len(symbols))
 	set.Add("w2", 16*len(symbols), 8*len(symbols))
 	set.Add("b2", 8*len(symbols))
-	set.Add("w3", 16*len(symbols), len(symbols))
-	set.Add("b3", len(symbols))
+	set.Add("w3", 16*len(symbols), 8*len(symbols))
+	set.Add("b3", 8*len(symbols))
+	set.Add("w4", 16*len(symbols), len(symbols))
+	set.Add("b4", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
@@ -312,8 +374,9 @@ func main() {
 	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
-	l3 := tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))
-	loss := tf32.Avg(tf32.Quadratic(l3, others.Get("output")))
+	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l4 := tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4"))
+	loss := tf32.Avg(tf32.Quadratic(l4, others.Get("output")))
 	iterations := 3 * 60 * 1024
 	if *FlagSmall {
 		iterations = 1024
@@ -329,7 +392,7 @@ func main() {
 		}
 
 		for j := 0; j < BatchSize; j++ {
-			vector := mind[rng.Intn(len(mind))]
+			vector := get(rng.Intn(len(in)))
 			copy(input.X[j*8*256:(j+1)*8*256], vector.Vector[:])
 			for k := 0; k < len(symbols); k++ {
 				output.X[j*len(symbols)+k] = 0
@@ -342,7 +405,7 @@ func main() {
 
 		cost = tf32.Gradient(loss).X[0]
 		if math.IsNaN(float64(cost)) || math.IsInf(float64(cost), 0) {
-			break
+			panic("IsNaN or IsInf")
 		}
 
 		norm := float32(0.0)
