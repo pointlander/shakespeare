@@ -150,7 +150,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 		l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 		l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l4 := tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4"))
+		l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
 
 		path := Path{}
 		cp := m.Copy()
@@ -361,7 +361,7 @@ func main() {
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l4 := tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4"))
+	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
 	loss := tf32.Avg(tf32.Quadratic(l4, others.Get("output")))
 	iterations := 3 * 60 * 1024
 	if *FlagSmall {
