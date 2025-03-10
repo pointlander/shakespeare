@@ -158,22 +158,16 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 			q := cp.Mix()
 			copy(input.X, q[:])
 			l4(func(a *tf32.V) bool {
-				min := float32(math.MaxFloat32)
-				for _, v := range a.X {
-					if v < min {
-						min = v
-					}
-				}
 				sum := float32(0.0)
 				for _, v := range a.X {
-					sum += v - min
+					sum += v
 				}
 				selection, total := rng.Float32(), float32(0.0)
 				for i, v := range a.X {
-					total += (v - min) / sum
+					total += v / sum
 					if selection < total {
 						path.Path += fmt.Sprintf("%c", isymbols[i])
-						path.Cost += (v - min) / sum
+						path.Cost += v / sum
 						cp.Add(byte(i))
 						return true
 					}
