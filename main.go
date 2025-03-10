@@ -143,7 +143,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	process := func(seed int64) {
 		rng := rand.New(rand.NewSource(seed))
 		others := tf32.NewSet()
-		others.Add("input", 8*256, 1)
+		others.Add("input", 8*256)
 		input := others.ByName["input"]
 		input.X = input.X[:cap(input.X)]
 		l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
@@ -152,13 +152,11 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
 		l4 := tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4"))
 
-		query := ""
-		cost := float32(0.0)
+		path := Path{}
 		cp := m.Copy()
 		for l := 0; l < 32; l++ {
 			q := cp.Mix()
 			copy(input.X, q[:])
-			max, symbol := float32(0.0), 0
 			l4(func(a *tf32.V) bool {
 				sum := float32(0.0)
 				for _, v := range a.X {
@@ -168,35 +166,19 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 				for i, v := range a.X {
 					total += v / sum
 					if selection < total {
-						cost += v / sum
-						symbol = i
-						break
+						path.Path += fmt.Sprintf("%c", isymbols[i])
+						path.Cost += v / sum
+						cp.Add(byte(i))
+						return true
 					}
 				}
-				/*cp := make([]float32, len(a.X))
-				copy(cp, a.X)
-				softmax(cp)
-				selection, total := rng.Float32(), float32(0.0)
-				for i, v := range cp {
-					total += v
-					if selection < total {
-						cost += v
-						symbol = i
-						break
-					}
-				}*/
 				return true
 			})
-			_ = max
-			query += fmt.Sprintf("%c", isymbols[symbol])
-			cp.Add(byte(symbol))
 		}
-		done <- Path{
-			Path: query,
-			Cost: cost,
-		}
+		path.Cost /= 32.0
+		done <- path
 	}
-	const space = 8 * 1024
+	const space = 8 * 64
 	best := ""
 	cpus := runtime.NumCPU()
 	for i := 0; i < 8; i++ {
@@ -219,9 +201,6 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 		for k := 0; k < flight; k++ {
 			path := <-done
 			paths = append(paths, path)
-		}
-		for i := range paths {
-			paths[i].Cost /= float32(len(paths[i].Path))
 		}
 		sort.Slice(paths, func(i, j int) bool {
 			return paths[i].Cost > paths[j].Cost
