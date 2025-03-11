@@ -51,6 +51,10 @@ const (
 var (
 	// FlagVectors build vector db
 	FlagVectors = flag.Bool("vectors", false, "build vector db")
+	// FlagPrompt the prompt to use
+	FlagPrompt = flag.String("prompt", "Hello World!", "the prompt to use")
+	// FlagCount the number of symbols to generate
+	FlagCount = flag.Int("count", 256, "number of symbols to generate")
 	// FlagInfer run the model in inference mode
 	FlagInfer = flag.String("infer", "", "inference mode")
 	// FlagInfer2 run the model in inference 2 mode
@@ -129,7 +133,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
 	m := NewMixer()
-	for _, v := range []rune("Hello world!") {
+	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
 	set := tf32.NewSet()
@@ -221,7 +225,7 @@ func Infer2(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
 	m := NewMixer()
-	for _, v := range []rune("Hello world!") {
+	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
 	set := tf32.NewSet()
@@ -242,7 +246,7 @@ func Infer2(symbols map[rune]int, isymbols map[int]rune) {
 
 	path := ""
 	cost := float32(0.0)
-	for l := 0; l < 32; l++ {
+	for l := 0; l < *FlagCount; l++ {
 		q := m.Mix()
 		copy(input.X, q[:])
 		l4(func(a *tf32.V) bool {
