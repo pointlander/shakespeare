@@ -53,6 +53,8 @@ var (
 	FlagVectors = flag.Bool("vectors", false, "build vector db")
 	// FlagInfer run the model in inference mode
 	FlagInfer = flag.String("infer", "", "inference mode")
+	// FlagInfer2 run the model in inference 2 mode
+	FlagInfer2 = flag.String("infer2", "", "inference 2 mode")
 	/// FlagSmall is small mode
 	FlagSmall = flag.Bool("small", false, "small mode")
 )
@@ -214,6 +216,57 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	fmt.Printf(best)
 }
 
+// Infer2 run inference 2 on the mode
+func Infer2(symbols map[rune]int, isymbols map[int]rune) {
+	rng := rand.New(rand.NewSource(1))
+
+	m := NewMixer()
+	for _, v := range []rune("Hello world!") {
+		m.Add(byte(symbols[v]))
+	}
+	set := tf32.NewSet()
+	_, _, err := set.Open(*FlagInfer2)
+	if err != nil {
+		panic(err)
+	}
+
+	others := tf32.NewSet()
+	others.Add("input", 8*256)
+	input := others.ByName["input"]
+	input.X = input.X[:cap(input.X)]
+	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+
+	path := ""
+	cost := float32(0.0)
+	for l := 0; l < 32; l++ {
+		q := m.Mix()
+		copy(input.X, q[:])
+		l4(func(a *tf32.V) bool {
+			sum := float32(0.0)
+			for _, v := range a.X {
+				sum += v
+			}
+			selection, total := rng.Float32(), float32(0.0)
+			for i, v := range a.X {
+				total += v / sum
+				if selection < total {
+					path += fmt.Sprintf("%c", isymbols[i])
+					cost += v / sum
+					m.Add(byte(i))
+					return true
+				}
+			}
+			return true
+		})
+	}
+	fmt.Println(cost)
+	fmt.Println(path)
+}
+
 func main() {
 	flag.Parse()
 
@@ -242,6 +295,11 @@ func main() {
 
 	if *FlagInfer != "" {
 		Infer(symbols, isymbols)
+		return
+	}
+
+	if *FlagInfer2 != "" {
+		Infer2(symbols, isymbols)
 		return
 	}
 
