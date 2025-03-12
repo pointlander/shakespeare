@@ -4,12 +4,112 @@
 
 package main
 
+import (
+	"fmt"
+)
+
 const (
 	// Size is the number of histograms
 	Size = 8
 	// Order is the order of the markov model
 	Order = 7
 )
+
+const (
+	// CDF16Fixed is the shift for 16 bit coders
+	CDF16Fixed = 16 - 3
+	// CDF16Scale is the scale for 16 bit coder
+	CDF16Scale = 1 << CDF16Fixed
+	// CDF16Rate is the damping factor for 16 bit coder
+	CDF16Rate = 5
+)
+
+type CDF16 struct {
+	Size   int
+	Model  []uint16
+	Mixin  [][]uint16
+	Verify bool
+}
+
+type Filtered16 interface {
+	GetModel() []uint16
+	Update(s uint16)
+}
+
+type CDF16Maker func(size int) Filtered16
+
+func NewCDF16(verify bool) CDF16Maker {
+	return func(size int) Filtered16 {
+		if size != 256 {
+			panic("size is not 256")
+		}
+		model, sum := make([]uint16, size+1), 0
+		for i := range model {
+			model[i] = uint16(sum)
+			sum += 32
+		}
+
+		mixin := make([][]uint16, size)
+
+		for i := range mixin {
+			sum, m := 0, make([]uint16, size+1)
+			for j := range m {
+				m[j] = uint16(sum)
+				sum++
+				if j == i {
+					sum += CDF16Scale - size
+				}
+			}
+			mixin[i] = m
+		}
+
+		return &CDF16{
+			Size:   size,
+			Model:  model,
+			Mixin:  mixin,
+			Verify: verify,
+		}
+	}
+}
+
+// GetModel gets the cdf
+func (c *CDF16) GetModel() []uint16 {
+	return c.Model
+}
+
+// Update the cdf
+func (c *CDF16) Update(s uint16) {
+	model, mixin := c.Model, c.Mixin[s]
+	size := len(model) - 1
+
+	if c.Verify {
+		for i := 1; i < size; i++ {
+			a, b := int(model[i]), int(mixin[i])
+			if a < 0 {
+				panic("a is less than zero")
+			}
+			if b < 0 {
+				panic("b is less than zero")
+			}
+			model[i] = uint16(a + ((b - a) >> CDF16Rate))
+		}
+		if model[size] != CDF16Scale {
+			panic("cdf scale is incorrect")
+		}
+		for i := 1; i < len(model); i++ {
+			if a, b := model[i], model[i-1]; a < b {
+				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
+			} else if a == b {
+				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
+			}
+		}
+	} else {
+		for i := 1; i < size; i++ {
+			a, b := int(model[i]), int(mixin[i])
+			model[i] = uint16(a + ((b - a) >> CDF16Rate))
+		}
+	}
+}
 
 // Markov is a markov model
 type Markov [Order + 1]byte
