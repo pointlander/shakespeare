@@ -179,7 +179,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 
 // Reason run reason based inference
 func Reason(symbols map[rune]int, isymbols map[int]rune) {
-	rng := rand.New(rand.NewSource(1))
+	rng := rand.New(rand.NewSource(2))
 
 	m := NewMixer()
 	for _, v := range []rune(*FlagPrompt) {
@@ -235,13 +235,15 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		}
 	}
 
+	perm := rng.Perm(len(vectors))
+
 	for i := 0; i < *FlagCount; i++ {
 		vector := m.Mix()
 		max, index := float32(0.0), 0
 		for j := range vectors {
-			cs := NCS(vectors[j].Vector[:], vector[:])
+			cs := NCS(vectors[perm[j]].Vector[:], vector[:])
 			if cs > max {
-				max, index = cs, j
+				max, index = cs, perm[j]
 			}
 		}
 		symbol := vectors[index].Symbol
