@@ -13,8 +13,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
@@ -57,8 +55,8 @@ var (
 	FlagCount = flag.Int("count", 256, "number of symbols to generate")
 	// FlagInfer run the model in inference mode
 	FlagInfer = flag.String("infer", "", "inference mode")
-	// FlagInfer2 run the model in inference 2 mode
-	FlagInfer2 = flag.String("infer2", "", "inference 2 mode")
+	// FlagReason reason mode
+	FlagReason = flag.String("reason", "", "reason mode")
 	/// FlagSmall is small mode
 	FlagSmall = flag.Bool("small", false, "small mode")
 )
@@ -128,7 +126,7 @@ func Quadratic(k tf32.Continuation, node int, a, b *tf32.V, options ...map[strin
 	return false
 }
 
-// Infer run inference on the mode
+// Infer runs inference on the model
 func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
@@ -138,98 +136,6 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	}
 	set := tf32.NewSet()
 	_, _, err := set.Open(*FlagInfer)
-	if err != nil {
-		panic(err)
-	}
-	type Path struct {
-		Path string
-		Cost float32
-	}
-	done := make(chan Path, 8)
-	process := func(seed int64) {
-		rng := rand.New(rand.NewSource(seed))
-		others := tf32.NewSet()
-		others.Add("input", 8*256)
-		input := others.ByName["input"]
-		input.X = input.X[:cap(input.X)]
-		l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
-		l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
-		l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
-		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
-
-		path := Path{}
-		cp := m.Copy()
-		for l := 0; l < 32; l++ {
-			q := cp.Mix()
-			copy(input.X, q[:])
-			l4(func(a *tf32.V) bool {
-				sum := float32(0.0)
-				for _, v := range a.X {
-					sum += v
-				}
-				selection, total := rng.Float32(), float32(0.0)
-				for i, v := range a.X {
-					total += v / sum
-					if selection < total {
-						path.Path += fmt.Sprintf("%c", isymbols[i])
-						path.Cost += v / sum
-						cp.Add(byte(i))
-						return true
-					}
-				}
-				return true
-			})
-		}
-		path.Cost /= 32.0
-		done <- path
-	}
-	const space = 8 * 1024
-	best := ""
-	cpus := runtime.NumCPU()
-	for i := 0; i < 8; i++ {
-		paths := make([]Path, 0, 8)
-		j, flight := 0, 0
-		for j < space && flight < cpus {
-			go process(rng.Int63())
-			flight++
-			j++
-		}
-		for j < space {
-			path := <-done
-			paths = append(paths, path)
-			flight--
-
-			go process(rng.Int63())
-			flight++
-			j++
-		}
-		for k := 0; k < flight; k++ {
-			path := <-done
-			paths = append(paths, path)
-		}
-		sort.Slice(paths, func(i, j int) bool {
-			return paths[i].Cost > paths[j].Cost
-		})
-		best += paths[0].Path
-		fmt.Println(paths[0].Cost)
-		for _, v := range []rune(paths[0].Path) {
-			m.Add(byte(symbols[v]))
-		}
-	}
-	fmt.Printf(best)
-}
-
-// Infer2 run inference 2 on the mode
-func Infer2(symbols map[rune]int, isymbols map[int]rune) {
-	rng := rand.New(rand.NewSource(1))
-
-	m := NewMixer()
-	for _, v := range []rune(*FlagPrompt) {
-		m.Add(byte(symbols[v]))
-	}
-	set := tf32.NewSet()
-	_, _, err := set.Open(*FlagInfer2)
 	if err != nil {
 		panic(err)
 	}
@@ -271,6 +177,80 @@ func Infer2(symbols map[rune]int, isymbols map[int]rune) {
 	fmt.Println(path)
 }
 
+// Reason run reason based inference
+func Reason(symbols map[rune]int, isymbols map[int]rune) {
+	rng := rand.New(rand.NewSource(1))
+
+	m := NewMixer()
+	for _, v := range []rune(*FlagPrompt) {
+		m.Add(byte(symbols[v]))
+	}
+	set := tf32.NewSet()
+	_, _, err := set.Open(*FlagReason)
+	if err != nil {
+		panic(err)
+	}
+
+	others := tf32.NewSet()
+	others.Add("input", 8*256)
+	input := others.ByName["input"]
+	input.X = input.X[:cap(input.X)]
+	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+
+	type Vector struct {
+		Vector [8 * 256]float32
+		Symbol int
+	}
+
+	vectors := make([]Vector, 0, 8)
+	path := ""
+	for i := 0; i < 33; i++ {
+		cp := m.Copy()
+		for j := 0; j < *FlagCount; j++ {
+			q := cp.Mix()
+			copy(input.X, q[:])
+			l4(func(a *tf32.V) bool {
+				sum := float32(0.0)
+				for _, v := range a.X {
+					sum += v
+				}
+				selection, total := rng.Float32(), float32(0.0)
+				for i, v := range a.X {
+					total += v / sum
+					if selection < total {
+						vectors = append(vectors, Vector{
+							Vector: q,
+							Symbol: i,
+						})
+						cp.Add(byte(i))
+						return true
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	for i := 0; i < *FlagCount; i++ {
+		vector := m.Mix()
+		max, index := float32(0.0), 0
+		for j := range vectors {
+			cs := NCS(vectors[j].Vector[:], vector[:])
+			if cs > max {
+				max, index = cs, j
+			}
+		}
+		symbol := vectors[index].Symbol
+		path += fmt.Sprintf("%c", isymbols[symbol])
+		m.Add(byte(symbol))
+	}
+	fmt.Println(path)
+}
+
 func main() {
 	flag.Parse()
 
@@ -302,8 +282,8 @@ func main() {
 		return
 	}
 
-	if *FlagInfer2 != "" {
-		Infer2(symbols, isymbols)
+	if *FlagReason != "" {
+		Reason(symbols, isymbols)
 		return
 	}
 
