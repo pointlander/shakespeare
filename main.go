@@ -180,7 +180,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 
 // Reason run reason based inference
 func Reason(symbols map[rune]int, isymbols map[int]rune) {
-	rng := rand.New(rand.NewSource(3))
+	rng := rand.New(rand.NewSource(1))
 
 	m := NewMixer()
 	for _, v := range []rune(*FlagPrompt) {
@@ -205,6 +205,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	type Vector struct {
 		Vector [8 * 256]float32
 		Symbol int
+		Burned bool
 	}
 
 	done := make(chan []Vector, 8)
@@ -272,11 +273,15 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		vector := m.Mix()
 		max, index := float32(0.0), 0
 		for j := range vectors {
+			if vectors[j].Burned {
+				continue
+			}
 			cs := NCS(vectors[perm[j]].Vector[:], vector[:])
 			if cs > max {
 				max, index = cs, perm[j]
 			}
 		}
+		vectors[index].Burned = true
 		symbol := vectors[index].Symbol
 		path += fmt.Sprintf("%c", isymbols[symbol])
 		m.Add(byte(symbol))
