@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
@@ -179,7 +180,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 
 // Reason run reason based inference
 func Reason(symbols map[rune]int, isymbols map[int]rune) {
-	rng := rand.New(rand.NewSource(2))
+	rng := rand.New(rand.NewSource(3))
 
 	m := NewMixer()
 	for _, v := range []rune(*FlagPrompt) {
@@ -206,9 +207,10 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		Symbol int
 	}
 
-	vectors := make([]Vector, 0, 8)
-	path := ""
-	for i := 0; i < 33; i++ {
+	done := make(chan []Vector, 8)
+	process := func(seed int64) {
+		rng := rand.New(rand.NewSource(seed))
+		vectors := make([]Vector, *FlagCount)
 		cp := m.Copy()
 		for j := 0; j < *FlagCount; j++ {
 			q := cp.Mix()
@@ -222,10 +224,10 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 				for i, v := range a.X {
 					total += v / sum
 					if selection < total {
-						vectors = append(vectors, Vector{
+						vectors[j] = Vector{
 							Vector: q,
 							Symbol: i,
-						})
+						}
 						cp.Add(byte(i))
 						return true
 					}
@@ -233,10 +235,39 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 				return true
 			})
 		}
+		done <- vectors
+	}
+	cpus := runtime.NumCPU()
+	i, flight := 0, 0
+	vectors, index := make([]Vector, 33**FlagCount), 0
+	for i < 33 && flight < cpus {
+		go process(rng.Int63())
+		flight++
+		i++
+	}
+	for i < 33 {
+		vecs := <-done
+		for _, v := range vecs {
+			vectors[index] = v
+			index++
+		}
+		flight--
+
+		go process(rng.Int63())
+		flight++
+		i++
+	}
+	for f := 0; f < flight; f++ {
+		vecs := <-done
+		for _, v := range vecs {
+			vectors[index] = v
+			index++
+		}
 	}
 
 	perm := rng.Perm(len(vectors))
 
+	path := ""
 	for i := 0; i < *FlagCount; i++ {
 		vector := m.Mix()
 		max, index := float32(0.0), 0
