@@ -34,6 +34,7 @@ type CDF16 struct {
 
 type Filtered16 interface {
 	GetModel() []uint16
+	Copy() Filtered16
 	Update(s uint16)
 }
 
@@ -71,6 +72,19 @@ func NewCDF16(verify bool) CDF16Maker {
 			Mixin:  mixin,
 			Verify: verify,
 		}
+	}
+}
+
+// Copy copies the model
+func (c *CDF16) Copy() Filtered16 {
+	model := make([]uint16, len(c.Model))
+	copy(model, c.Model)
+	return &CDF16{
+		Size:   c.Size,
+		Rate:   c.Rate,
+		Model:  model,
+		Mixin:  c.Mixin,
+		Verify: c.Verify,
 	}
 }
 

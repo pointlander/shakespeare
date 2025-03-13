@@ -20,3 +20,24 @@ func TestCDF(t *testing.T) {
 		}
 	}
 }
+
+func TestCDFCopy(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	for i := 1; i < 9; i++ {
+		cdf := NewCDF16(true)
+		filtered := cdf(256, i)
+		cp := filtered.Copy()
+		for j := 0; j < 1024; j++ {
+			x := rng.Intn(256)
+			filtered.Update(uint16(x))
+			cp.Update(uint16(x))
+			t.Log(filtered.GetModel())
+		}
+		a, b := filtered.GetModel(), cp.GetModel()
+		for i, v := range a {
+			if v != b[i] {
+				t.Fatalf("%d != %d", v, b[i])
+			}
+		}
+	}
+}
