@@ -41,3 +41,21 @@ func TestCDFCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestFiltered(t *testing.T) {
+	a := NewFiltered()
+	a.Add(1)
+	a.Add(1)
+	b := NewFiltered()
+	b.Add(1)
+	c := NewFiltered()
+	c.Add(1)
+	x := a.Mix()
+	y := b.Mix()
+	z := c.Mix()
+	i := NCS(z[:], x[:])
+	j := NCS(z[:], y[:])
+	if j < i {
+		t.Fatalf("%f < %f", j, i)
+	}
+}

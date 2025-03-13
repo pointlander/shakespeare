@@ -157,6 +157,60 @@ func (h *Histogram) Add(s byte) {
 	h.Index = index
 }
 
+// Filtered is a filtered counter
+type Filtered struct {
+	Filters []Filtered16
+}
+
+// NewFiltered makes a new filtered counter
+func NewFiltered() Filtered {
+	cdf := NewCDF16(false)
+	filters := make([]Filtered16, Size)
+	for i := range filters {
+		filters[i] = cdf(256, i+1)
+	}
+	return Filtered{
+		Filters: filters,
+	}
+}
+
+// Copy copies the filter
+func (f Filtered) Copy() Filtered {
+	filters := make([]Filtered16, len(f.Filters))
+	for i := range filters {
+		filters[i] = f.Filters[i].Copy()
+	}
+	return Filtered{
+		Filters: filters,
+	}
+}
+
+// Add adds a symbol to a filter
+func (f Filtered) Add(s byte) {
+	for i := range f.Filters {
+		f.Filters[i].Update(uint16(s))
+	}
+}
+
+// Mix mixes the filters outputting a matrix
+func (f Filtered) Mix() [InputSize]float32 {
+	x := NewMatrix(256, Size)
+	for i := range f.Filters {
+		model := f.Filters[i].GetModel()
+		last, sum := uint16(0), float32(0.0)
+		for _, v := range model[1:] {
+			sum += float32(v - last)
+			last = v
+		}
+		last = 0
+		for _, v := range model[1:] {
+			x.Data = append(x.Data, float32(v-last)/sum)
+			last = v
+		}
+	}
+	return SelfAttention(x)
+}
+
 // Mixer mixes several histograms together
 type Mixer struct {
 	Markov     Markov
