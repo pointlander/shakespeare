@@ -26,6 +26,7 @@ const (
 
 type CDF16 struct {
 	Size   int
+	Rate   int
 	Model  []uint16
 	Mixin  [][]uint16
 	Verify bool
@@ -36,10 +37,10 @@ type Filtered16 interface {
 	Update(s uint16)
 }
 
-type CDF16Maker func(size int) Filtered16
+type CDF16Maker func(size, rate int) Filtered16
 
 func NewCDF16(verify bool) CDF16Maker {
-	return func(size int) Filtered16 {
+	return func(size, rate int) Filtered16 {
 		if size != 256 {
 			panic("size is not 256")
 		}
@@ -65,6 +66,7 @@ func NewCDF16(verify bool) CDF16Maker {
 
 		return &CDF16{
 			Size:   size,
+			Rate:   rate,
 			Model:  model,
 			Mixin:  mixin,
 			Verify: verify,
@@ -80,7 +82,7 @@ func (c *CDF16) GetModel() []uint16 {
 // Update the cdf
 func (c *CDF16) Update(s uint16) {
 	model, mixin := c.Model, c.Mixin[s]
-	size := len(model) - 1
+	size, rate := len(model)-1, c.Rate
 
 	if c.Verify {
 		for i := 1; i < size; i++ {
@@ -91,7 +93,7 @@ func (c *CDF16) Update(s uint16) {
 			if b < 0 {
 				panic("b is less than zero")
 			}
-			model[i] = uint16(a + ((b - a) >> CDF16Rate))
+			model[i] = uint16(a + ((b - a) >> rate))
 		}
 		if model[size] != CDF16Scale {
 			panic("cdf scale is incorrect")
@@ -106,7 +108,7 @@ func (c *CDF16) Update(s uint16) {
 	} else {
 		for i := 1; i < size; i++ {
 			a, b := int(model[i]), int(mixin[i])
-			model[i] = uint16(a + ((b - a) >> CDF16Rate))
+			model[i] = uint16(a + ((b - a) >> rate))
 		}
 	}
 }

@@ -11,10 +11,12 @@ import (
 
 func TestCDF(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
-	cdf := NewCDF16(true)
-	filtered := cdf(256)
-	for i := 0; i < 1024; i++ {
-		filtered.Update(uint16(rng.Intn(256)))
-		t.Log(filtered.GetModel())
+	for i := 1; i < 9; i++ {
+		cdf := NewCDF16(true)
+		filtered := cdf(256, i)
+		for j := 0; j < 1024; j++ {
+			filtered.Update(uint16(rng.Intn(256)))
+			t.Log(filtered.GetModel())
+		}
 	}
 }
