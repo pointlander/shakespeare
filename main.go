@@ -198,7 +198,6 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	type Vector struct {
 		Vector [8 * 256]float32
 		Symbol int
-		Burned bool
 		CS     float32
 	}
 
@@ -294,6 +293,8 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		symbol := vectors[index].Symbol
 		path += fmt.Sprintf("%c", isymbols[symbol])
 		m.Add(byte(symbol))
+		copy(vectors[index:], vectors[index+1:])
+		vectors = vectors[:len(vectors)-1]
 	}
 	fmt.Println("--------------------------------------------------------")
 	fmt.Println(path)
