@@ -14,9 +14,12 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
+
+	"github.com/alixaxel/pagerank"
 )
 
 //go:embed books/*
@@ -206,6 +209,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		Vector [8 * 256]float32
 		Symbol int
 		Burned bool
+		CS     float32
 	}
 
 	done := make(chan []Vector, 8)
@@ -266,27 +270,34 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		}
 	}
 
-	perm := rng.Perm(len(vectors))
-
 	path := ""
 	for i := 0; i < *FlagCount; i++ {
 		vector := m.Mix()
-		max, index := float32(0.0), 0
 		for j := range vectors {
-			if vectors[j].Burned {
-				continue
-			}
-			cs := NCS(vectors[perm[j]].Vector[:], vector[:])
-			if cs > max {
-				max, index = cs, perm[j]
+			vectors[j].CS = NCS(vectors[j].Vector[:], vector[:])
+		}
+		sort.Slice(vectors, func(i, j int) bool {
+			return vectors[i].CS > vectors[j].CS
+		})
+		graph := pagerank.NewGraph()
+		for j := 0; j < 3*33; j++ {
+			for k := 0; k < 3*33; k++ {
+				graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j].Vector[:], vectors[k].Vector[:])))
 			}
 		}
-		vectors[index].Burned = true
+		max, index := 0.0, 0
+		graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+			if rank > max {
+				max, index = rank, int(node)
+			}
+		})
 		symbol := vectors[index].Symbol
 		path += fmt.Sprintf("%c", isymbols[symbol])
 		m.Add(byte(symbol))
 	}
+	fmt.Println("--------------------------------------------------------")
 	fmt.Println(path)
+	fmt.Println("--------------------------------------------------------")
 }
 
 func main() {
