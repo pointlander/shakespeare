@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
@@ -243,7 +242,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	}
 	cpus := runtime.NumCPU()
 	i, flight := 0, 0
-	vectors, index := make([]Vector, 33**FlagCount), 0
+	vectors, index := make([][]Vector, 33), 0
 	for i < 33 && flight < cpus {
 		go process(rng.Int63())
 		flight++
@@ -251,10 +250,8 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	}
 	for i < 33 {
 		vecs := <-done
-		for _, v := range vecs {
-			vectors[index] = v
-			index++
-		}
+		vectors[index] = vecs
+		index++
 		flight--
 
 		go process(rng.Int63())
@@ -263,38 +260,25 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	}
 	for f := 0; f < flight; f++ {
 		vecs := <-done
-		for _, v := range vecs {
-			vectors[index] = v
-			index++
-		}
+		vectors[index] = vecs
+		index++
 	}
 
+	graph := pagerank.NewGraph()
+	for j := 0; j < len(vectors); j++ {
+		for k := 0; k < len(vectors); k++ {
+			graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j][*FlagCount-1].Vector[:], vectors[k][*FlagCount-1].Vector[:])))
+		}
+	}
+	max, index := 0.0, 0
+	graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+		if rank > max {
+			max, index = rank, int(node)
+		}
+	})
 	path := ""
-	for i := 0; i < *FlagCount; i++ {
-		vector := m.Mix()
-		for j := range vectors {
-			vectors[j].CS = NCS(vectors[j].Vector[:], vector[:])
-		}
-		sort.Slice(vectors, func(i, j int) bool {
-			return vectors[i].CS > vectors[j].CS
-		})
-		graph := pagerank.NewGraph()
-		for j := 0; j < 7*33; j++ {
-			for k := 0; k < 7*33; k++ {
-				graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j].Vector[:], vectors[k].Vector[:])))
-			}
-		}
-		max, index := 0.0, 0
-		graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
-			if rank > max {
-				max, index = rank, int(node)
-			}
-		})
-		symbol := vectors[index].Symbol
-		path += fmt.Sprintf("%c", isymbols[symbol])
-		m.Add(byte(symbol))
-		copy(vectors[index:], vectors[index+1:])
-		vectors = vectors[:len(vectors)-1]
+	for _, v := range vectors[index] {
+		path += fmt.Sprintf("%c", isymbols[v.Symbol])
 	}
 	fmt.Println("--------------------------------------------------------")
 	fmt.Println(path)
