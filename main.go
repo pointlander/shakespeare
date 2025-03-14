@@ -195,16 +195,6 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		panic(err)
 	}
 
-	others := tf32.NewSet()
-	others.Add("input", 8*256)
-	input := others.ByName["input"]
-	input.X = input.X[:cap(input.X)]
-	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
-	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
-	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
-	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
-
 	type Vector struct {
 		Vector [8 * 256]float32
 		Symbol int
@@ -214,6 +204,16 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 
 	done := make(chan []Vector, 8)
 	process := func(seed int64) {
+		others := tf32.NewSet()
+		others.Add("input", 8*256)
+		input := others.ByName["input"]
+		input.X = input.X[:cap(input.X)]
+		l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+		l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+		l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+		l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+
 		rng := rand.New(rand.NewSource(seed))
 		vectors := make([]Vector, *FlagCount)
 		cp := m.Copy()
@@ -280,8 +280,8 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 			return vectors[i].CS > vectors[j].CS
 		})
 		graph := pagerank.NewGraph()
-		for j := 0; j < 3*33; j++ {
-			for k := 0; k < 3*33; k++ {
+		for j := 0; j < 7*33; j++ {
+			for k := 0; k < 7*33; k++ {
 				graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j].Vector[:], vectors[k].Vector[:])))
 			}
 		}
