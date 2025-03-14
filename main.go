@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
@@ -197,10 +198,14 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	type Vector struct {
 		Vector [8 * 256]float32
 		Symbol int
-		CS     float32
 	}
 
-	done := make(chan []Vector, 8)
+	type Vectors struct {
+		Vectors []Vector
+		Rank    float64
+	}
+
+	done := make(chan Vectors, 8)
 	process := func(seed int64) {
 		others := tf32.NewSet()
 		others.Add("input", 8*256)
@@ -238,17 +243,19 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 				return true
 			})
 		}
-		done <- vectors
+		done <- Vectors{
+			Vectors: vectors,
+		}
 	}
 	cpus := runtime.NumCPU()
 	i, flight := 0, 0
-	vectors, index := make([][]Vector, 33), 0
-	for i < 33 && flight < cpus {
+	vectors, index := make([]Vectors, 128), 0
+	for i < len(vectors) && flight < cpus {
 		go process(rng.Int63())
 		flight++
 		i++
 	}
-	for i < 33 {
+	for i < len(vectors) {
 		vecs := <-done
 		vectors[index] = vecs
 		index++
@@ -267,22 +274,24 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	graph := pagerank.NewGraph()
 	for j := 0; j < len(vectors); j++ {
 		for k := 0; k < len(vectors); k++ {
-			graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j][*FlagCount-1].Vector[:], vectors[k][*FlagCount-1].Vector[:])))
+			graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j].Vectors[*FlagCount-1].Vector[:], vectors[k].Vectors[*FlagCount-1].Vector[:])))
 		}
 	}
-	max, index := 0.0, 0
 	graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
-		if rank > max {
-			max, index = rank, int(node)
-		}
+		vectors[node].Rank = rank
 	})
-	path := ""
-	for _, v := range vectors[index] {
-		path += fmt.Sprintf("%c", isymbols[v.Symbol])
+	sort.Slice(vectors, func(i, j int) bool {
+		return vectors[i].Rank < vectors[j].Rank
+	})
+	for _, v := range vectors {
+		path := ""
+		for _, vv := range v.Vectors {
+			path += fmt.Sprintf("%c", isymbols[vv.Symbol])
+		}
+		fmt.Println("--------------------------------------------------------")
+		fmt.Println(v.Rank)
+		fmt.Println(path)
 	}
-	fmt.Println("--------------------------------------------------------")
-	fmt.Println(path)
-	fmt.Println("--------------------------------------------------------")
 }
 
 func main() {
