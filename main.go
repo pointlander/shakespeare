@@ -63,6 +63,8 @@ var (
 	FlagReason = flag.String("reason", "", "reason mode")
 	/// FlagSmall is small mode
 	FlagSmall = flag.Bool("small", false, "small mode")
+	// FlagMixer is the mixer type
+	FlagMixer = flag.String("mixer", "filtered", "mixer type")
 )
 
 // Quadratic computes the quadratic cost of two tensors
@@ -134,8 +136,12 @@ func Quadratic(k tf32.Continuation, node int, a, b *tf32.V, options ...map[strin
 func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
-	//m := NewMixer()
-	m := NewFiltered()
+	var m Mix
+	if *FlagMixer == "filtered" {
+		m = NewFiltered()
+	} else {
+		m = NewMixer()
+	}
 	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
@@ -186,8 +192,12 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
-	//m := NewMixer()
-	m := NewFiltered()
+	var m Mix
+	if *FlagMixer == "filtered" {
+		m = NewFiltered()
+	} else {
+		m = NewMixer()
+	}
 	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
@@ -343,8 +353,12 @@ func main() {
 		}
 		defer db.Close()
 
-		//m := NewMixer()
-		m := NewFiltered()
+		var m Mix
+		if *FlagMixer == "filtered" {
+			m = NewFiltered()
+		} else {
+			m = NewMixer()
+		}
 		m.Add(0)
 		buffer32 := make([]byte, 4)
 		for i, v := range in {

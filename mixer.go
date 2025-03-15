@@ -24,6 +24,13 @@ const (
 	CDF16Rate = 5
 )
 
+// Mix is a mixer
+type Mix interface {
+	Copy() Mix
+	Add(byte)
+	Mix() [InputSize]float32
+}
+
 type CDF16 struct {
 	Size   int
 	Rate   int
@@ -163,24 +170,24 @@ type Filtered struct {
 }
 
 // NewFiltered makes a new filtered counter
-func NewFiltered() Filtered {
+func NewFiltered() *Filtered {
 	cdf := NewCDF16(false)
 	filters := make([]Filtered16, Size)
 	for i := range filters {
 		filters[i] = cdf(256, i+1)
 	}
-	return Filtered{
+	return &Filtered{
 		Filters: filters,
 	}
 }
 
 // Copy copies the filter
-func (f Filtered) Copy() Filtered {
+func (f Filtered) Copy() Mix {
 	filters := make([]Filtered16, len(f.Filters))
 	for i := range filters {
 		filters[i] = f.Filters[i].Copy()
 	}
-	return Filtered{
+	return &Filtered{
 		Filters: filters,
 	}
 }
@@ -218,7 +225,7 @@ type Mixer struct {
 }
 
 // NewMixer makes a new mixer
-func NewMixer() Mixer {
+func NewMixer() *Mixer {
 	histograms := make([]Histogram, Size)
 	histograms[0] = NewHistogram(1)
 	histograms[1] = NewHistogram(2)
@@ -228,17 +235,17 @@ func NewMixer() Mixer {
 	histograms[5] = NewHistogram(32)
 	histograms[6] = NewHistogram(64)
 	histograms[7] = NewHistogram(128)
-	return Mixer{
+	return &Mixer{
 		Histograms: histograms,
 	}
 }
 
-func (m Mixer) Copy() Mixer {
+func (m Mixer) Copy() Mix {
 	histograms := make([]Histogram, Size)
 	for i := range m.Histograms {
 		histograms[i] = m.Histograms[i]
 	}
-	return Mixer{
+	return &Mixer{
 		Markov:     m.Markov,
 		Histograms: histograms,
 	}
