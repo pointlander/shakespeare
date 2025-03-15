@@ -134,7 +134,8 @@ func Quadratic(k tf32.Continuation, node int, a, b *tf32.V, options ...map[strin
 func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
-	m := NewMixer()
+	//m := NewMixer()
+	m := NewFiltered()
 	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
@@ -185,7 +186,8 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	rng := rand.New(rand.NewSource(1))
 
-	m := NewMixer()
+	//m := NewMixer()
+	m := NewFiltered()
 	for _, v := range []rune(*FlagPrompt) {
 		m.Add(byte(symbols[v]))
 	}
@@ -341,7 +343,8 @@ func main() {
 		}
 		defer db.Close()
 
-		m := NewMixer()
+		//m := NewMixer()
+		m := NewFiltered()
 		m.Add(0)
 		buffer32 := make([]byte, 4)
 		for i, v := range in {
