@@ -159,14 +159,17 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+	l4 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+	l5 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w5"), l4), set.Get("b5")))
+	l6 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w6"), l5), set.Get("b6")))
+	l7 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w7"), l6), set.Get("b7")))
 
 	path := ""
 	cost := float32(0.0)
 	for l := 0; l < *FlagCount; l++ {
 		q := m.Mix()
 		copy(input.X, q[:])
-		l4(func(a *tf32.V) bool {
+		l7(func(a *tf32.V) bool {
 			sum := float32(0.0)
 			for _, v := range a.X {
 				sum += v
@@ -227,7 +230,10 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 		l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+		l4 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+		l5 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w5"), l4), set.Get("b5")))
+		l6 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w6"), l5), set.Get("b6")))
+		l7 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w7"), l6), set.Get("b7")))
 
 		rng := rand.New(rand.NewSource(seed))
 		vectors := make([]Vector, *FlagCount)
@@ -235,7 +241,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		for j := 0; j < *FlagCount; j++ {
 			q := cp.Mix()
 			copy(input.X, q[:])
-			l4(func(a *tf32.V) bool {
+			l7(func(a *tf32.V) bool {
 				sum := float32(0.0)
 				for _, v := range a.X {
 					sum += v
@@ -437,8 +443,14 @@ func main() {
 	set.Add("b2", 8*len(symbols))
 	set.Add("w3", 16*len(symbols), 8*len(symbols))
 	set.Add("b3", 8*len(symbols))
-	set.Add("w4", 16*len(symbols), len(symbols))
-	set.Add("b4", len(symbols))
+	set.Add("w4", 16*len(symbols), 8*len(symbols))
+	set.Add("b4", 8*len(symbols))
+	set.Add("w5", 16*len(symbols), 8*len(symbols))
+	set.Add("b5", 8*len(symbols))
+	set.Add("w6", 16*len(symbols), 8*len(symbols))
+	set.Add("b6", 8*len(symbols))
+	set.Add("w7", 16*len(symbols), len(symbols))
+	set.Add("b7", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
@@ -463,8 +475,11 @@ func main() {
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
 	l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
 	l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l4 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
-	loss := tf32.Avg(tf32.Quadratic(l4, others.Get("output")))
+	l4 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+	l5 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w5"), l4), set.Get("b5")))
+	l6 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w6"), l5), set.Get("b6")))
+	l7 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w7"), l6), set.Get("b7")))
+	loss := tf32.Avg(tf32.Quadratic(l7, others.Get("output")))
 	iterations := 3 * 60 * 1024
 	if *FlagSmall {
 		iterations = 1024
