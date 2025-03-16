@@ -31,7 +31,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.89
 	// Eta is the learning rate
-	Eta = 1.0e-4
+	Eta = 1.0e-5
 )
 
 const (
@@ -435,21 +435,21 @@ func main() {
 	input.X = input.X[:cap(input.X)]
 	output.X = output.X[:cap(output.X)]
 	set := tf32.NewSet()
-	set.Add("w0", 8*256, 8*len(symbols))
-	set.Add("b0", 8*len(symbols))
-	set.Add("w1", 16*len(symbols), 8*len(symbols))
-	set.Add("b1", 8*len(symbols))
-	set.Add("w2", 16*len(symbols), 8*len(symbols))
-	set.Add("b2", 8*len(symbols))
-	set.Add("w3", 16*len(symbols), 8*len(symbols))
-	set.Add("b3", 8*len(symbols))
-	set.Add("w4", 16*len(symbols), 8*len(symbols))
-	set.Add("b4", 8*len(symbols))
-	set.Add("w5", 16*len(symbols), 8*len(symbols))
-	set.Add("b5", 8*len(symbols))
-	set.Add("w6", 16*len(symbols), 8*len(symbols))
-	set.Add("b6", 8*len(symbols))
-	set.Add("w7", 16*len(symbols), len(symbols))
+	set.Add("w0", 8*256, 16*len(symbols))
+	set.Add("b0", 16*len(symbols))
+	set.Add("w1", 32*len(symbols), 16*len(symbols))
+	set.Add("b1", 16*len(symbols))
+	set.Add("w2", 32*len(symbols), 16*len(symbols))
+	set.Add("b2", 16*len(symbols))
+	set.Add("w3", 32*len(symbols), 16*len(symbols))
+	set.Add("b3", 16*len(symbols))
+	set.Add("w4", 32*len(symbols), 16*len(symbols))
+	set.Add("b4", 16*len(symbols))
+	set.Add("w5", 32*len(symbols), 16*len(symbols))
+	set.Add("b5", 16*len(symbols))
+	set.Add("w6", 32*len(symbols), 16*len(symbols))
+	set.Add("b6", 16*len(symbols))
+	set.Add("w7", 32*len(symbols), len(symbols))
 	set.Add("b7", len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
