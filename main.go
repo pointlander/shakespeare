@@ -31,7 +31,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.89
 	// Eta is the learning rate
-	Eta = 1.0e-5
+	Eta = 1.0e-4
 )
 
 const (
@@ -171,11 +171,11 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 		copy(input.X, q[:])
 		l7(func(a *tf32.V) bool {
 			sum := float32(0.0)
-			for _, v := range a.X {
+			for _, v := range a.X[:len(symbols)] {
 				sum += v
 			}
 			selection, total := rng.Float32(), float32(0.0)
-			for i, v := range a.X {
+			for i, v := range a.X[:len(symbols)] {
 				total += v / sum
 				if selection < total {
 					path += fmt.Sprintf("%c", isymbols[i])
@@ -243,11 +243,11 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 			copy(input.X, q[:])
 			l7(func(a *tf32.V) bool {
 				sum := float32(0.0)
-				for _, v := range a.X {
+				for _, v := range a.X[:len(symbols)] {
 					sum += v
 				}
 				selection, total := rng.Float32(), float32(0.0)
-				for i, v := range a.X {
+				for i, v := range a.X[:len(symbols)] {
 					total += v / sum
 					if selection < total {
 						vectors[j] = Vector{
@@ -367,7 +367,7 @@ func main() {
 		}
 		m.Add(0)
 		buffer32 := make([]byte, 4)
-		for i, v := range in {
+		for i, v := range in[:len(in)-2] {
 			vector := m.Mix()
 			for _, v := range vector {
 				bits := math.Float32bits(v)
@@ -382,12 +382,12 @@ func main() {
 					panic("4 bytes should be been written")
 				}
 			}
-			n, err := db.Write(in[i : i+1])
+			n, err := db.Write(in[i : i+3])
 			if err != nil {
 				panic(err)
 			}
-			if n != 1 {
-				panic("1 bytes should be been written")
+			if n != 3 {
+				panic("3 bytes should be been written")
 			}
 			m.Add(v)
 		}
@@ -396,7 +396,7 @@ func main() {
 
 	type Vector struct {
 		Vector [InputSize]float32
-		Symbol byte
+		Symbol [3]byte
 	}
 	vectors, err := os.Open("vectors.bin")
 	if err != nil {
@@ -404,18 +404,18 @@ func main() {
 	}
 	defer vectors.Close()
 	get := func(i int) Vector {
-		_, err := vectors.Seek(int64((InputSize*4+1)*i), io.SeekStart)
+		_, err := vectors.Seek(int64((InputSize*4+3)*i), io.SeekStart)
 		if err != nil {
 			panic(err)
 		}
 		vector := Vector{}
-		buffer := make([]byte, InputSize*4+1)
+		buffer := make([]byte, InputSize*4+3)
 		n, err := vectors.Read(buffer)
+		if n != len(buffer) {
+			panic(fmt.Sprintf("%d bytes should have been read, %d was read", len(buffer), n))
+		}
 		if err != nil {
 			panic(err)
-		}
-		if n != len(buffer) {
-			panic(fmt.Sprintf("%d bytes should have been read", len(buffer)))
 		}
 		for k := range vector.Vector {
 			var bits uint32
@@ -424,33 +424,35 @@ func main() {
 			}
 			vector.Vector[k] = math.Float32frombits(bits)
 		}
-		vector.Symbol = buffer[len(buffer)-1]
+		vector.Symbol[0] = buffer[len(buffer)-3]
+		vector.Symbol[1] = buffer[len(buffer)-2]
+		vector.Symbol[2] = buffer[len(buffer)-1]
 		return vector
 	}
 
 	others := tf32.NewSet()
 	others.Add("input", 8*256, BatchSize)
-	others.Add("output", len(symbols), BatchSize)
+	others.Add("output", 3*len(symbols), BatchSize)
 	input, output := others.ByName["input"], others.ByName["output"]
 	input.X = input.X[:cap(input.X)]
 	output.X = output.X[:cap(output.X)]
 	set := tf32.NewSet()
-	set.Add("w0", 8*256, 16*len(symbols))
-	set.Add("b0", 16*len(symbols))
-	set.Add("w1", 32*len(symbols), 16*len(symbols))
-	set.Add("b1", 16*len(symbols))
-	set.Add("w2", 32*len(symbols), 16*len(symbols))
-	set.Add("b2", 16*len(symbols))
-	set.Add("w3", 32*len(symbols), 16*len(symbols))
-	set.Add("b3", 16*len(symbols))
-	set.Add("w4", 32*len(symbols), 16*len(symbols))
-	set.Add("b4", 16*len(symbols))
-	set.Add("w5", 32*len(symbols), 16*len(symbols))
-	set.Add("b5", 16*len(symbols))
-	set.Add("w6", 32*len(symbols), 16*len(symbols))
-	set.Add("b6", 16*len(symbols))
-	set.Add("w7", 32*len(symbols), len(symbols))
-	set.Add("b7", len(symbols))
+	set.Add("w0", 8*256, 8*len(symbols))
+	set.Add("b0", 8*len(symbols))
+	set.Add("w1", 16*len(symbols), 8*len(symbols))
+	set.Add("b1", 8*len(symbols))
+	set.Add("w2", 16*len(symbols), 8*len(symbols))
+	set.Add("b2", 8*len(symbols))
+	set.Add("w3", 16*len(symbols), 8*len(symbols))
+	set.Add("b3", 8*len(symbols))
+	set.Add("w4", 16*len(symbols), 8*len(symbols))
+	set.Add("b4", 8*len(symbols))
+	set.Add("w5", 16*len(symbols), 8*len(symbols))
+	set.Add("b5", 8*len(symbols))
+	set.Add("w6", 16*len(symbols), 8*len(symbols))
+	set.Add("b6", 8*len(symbols))
+	set.Add("w7", 16*len(symbols), 3*len(symbols))
+	set.Add("b7", 3*len(symbols))
 	for i := range set.Weights {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
@@ -495,12 +497,14 @@ func main() {
 		}
 
 		for j := 0; j < BatchSize; j++ {
-			vector := get(rng.Intn(len(in)))
+			vector := get(rng.Intn(len(in) - 2))
 			copy(input.X[j*8*256:(j+1)*8*256], vector.Vector[:])
-			for k := 0; k < len(symbols); k++ {
-				output.X[j*len(symbols)+k] = 0
+			for k := 0; k < 3*len(symbols); k++ {
+				output.X[j*3*len(symbols)+k] = 0
 			}
-			output.X[j*len(symbols)+int(vector.Symbol)] = 1
+			output.X[j*3*len(symbols)+int(vector.Symbol[0])] = 1
+			output.X[j*3*len(symbols)+len(symbols)+int(vector.Symbol[1])] = 1
+			output.X[j*3*len(symbols)+2*len(symbols)+int(vector.Symbol[2])] = 1
 		}
 
 		others.Zero()
