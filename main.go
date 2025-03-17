@@ -166,24 +166,11 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 
 	path := ""
 	cost := float32(0.0)
-	var last [2][]float32
 	for l := 0; l < *FlagCount; l++ {
 		q := m.Mix()
 		copy(input.X, q[:])
 		l7(func(a *tf32.V) bool {
-			aa := make([]float32, len(symbols))
-			copy(aa, a.X[:len(symbols)])
-			if len(last[0]) > 0 {
-				for i, v := range last[0][len(symbols) : 2*len(symbols)] {
-					aa[i] += v
-				}
-			}
-			if len(last[1]) > 0 {
-				for i, v := range last[1][2*len(symbols) : 3*len(symbols)] {
-					aa[i] += v
-				}
-			}
-			last[1], last[0] = last[0], a.X
+			aa := a.X[:len(symbols)]
 			sum := float32(0.0)
 			for _, v := range aa {
 				sum += v
@@ -252,24 +239,11 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		rng := rand.New(rand.NewSource(seed))
 		vectors := make([]Vector, *FlagCount)
 		cp := m.Copy()
-		var last [2][]float32
 		for j := 0; j < *FlagCount; j++ {
 			q := cp.Mix()
 			copy(input.X, q[:])
 			l7(func(a *tf32.V) bool {
-				aa := make([]float32, len(symbols))
-				copy(aa, a.X[:len(symbols)])
-				if len(last[0]) > 0 {
-					for i, v := range last[0][len(symbols) : 2*len(symbols)] {
-						aa[i] += v
-					}
-				}
-				if len(last[1]) > 0 {
-					for i, v := range last[1][2*len(symbols) : 3*len(symbols)] {
-						aa[i] += v
-					}
-				}
-				last[1], last[0] = last[0], a.X
+				aa := a.X[:len(symbols)]
 				sum := float32(0.0)
 				for _, v := range aa {
 					sum += v
