@@ -301,8 +301,90 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		vectors[node].Rank = rank
 	})
 	sort.Slice(vectors, func(i, j int) bool {
+		return vectors[i].Rank > vectors[j].Rank
+	})
+
+	for i := 0; i < 33; i++ {
+		for j := range vectors {
+			for k := 0; k < 8; k++ {
+				vector := Vectors{
+					Vectors: make([]Vector, *FlagCount),
+				}
+				copy(vector.Vectors, vectors[j].Vectors)
+				var m Mix
+				if *FlagMixer == "filtered" {
+					m = NewFiltered()
+				} else {
+					m = NewMixer()
+				}
+				m.Add(0)
+				n := rng.Intn(*FlagCount)
+				for l := 0; l < n; l++ {
+					m.Add(byte(vectors[j].Vectors[l].Symbol))
+				}
+
+				others := tf32.NewSet()
+				others.Add("input", 8*256)
+				input := others.ByName["input"]
+				input.X = input.X[:cap(input.X)]
+				l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+				l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+				l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+				l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+				l4 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+				l5 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w5"), l4), set.Get("b5")))
+				l6 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w6"), l5), set.Get("b6")))
+				l7 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w7"), l6), set.Get("b7")))
+				q := m.Mix()
+				copy(input.X, q[:])
+				l7(func(a *tf32.V) bool {
+					aa := a.X[:len(symbols)]
+					sum := float32(0.0)
+					for _, v := range aa {
+						sum += v
+					}
+					selection, total := rng.Float32(), float32(0.0)
+					for i, v := range aa {
+						total += v / sum
+						if selection < total {
+							vector.Vectors[n] = Vector{
+								Vector: q,
+								Symbol: i,
+							}
+							m.Add(byte(i))
+							return true
+						}
+					}
+					return true
+				})
+
+				for l := n + 1; l < *FlagCount; l++ {
+					vector.Vectors[l].Vector = m.Mix()
+					m.Add(byte(vector.Vectors[l].Symbol))
+				}
+				vectors = append(vectors, vector)
+			}
+		}
+		graph := pagerank.NewGraph()
+		for j := 0; j < len(vectors); j++ {
+			for k := 0; k < len(vectors); k++ {
+				graph.Link(uint32(j), uint32(k), float64(NCS(vectors[j].Vectors[*FlagCount-1].Vector[:], vectors[k].Vectors[*FlagCount-1].Vector[:])))
+			}
+		}
+		graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+			vectors[node].Rank = rank
+		})
+		sort.Slice(vectors, func(i, j int) bool {
+			return vectors[i].Rank > vectors[j].Rank
+		})
+		vectors = vectors[:128]
+		fmt.Println(vectors[0].Rank)
+	}
+
+	sort.Slice(vectors, func(i, j int) bool {
 		return vectors[i].Rank < vectors[j].Rank
 	})
+
 	for _, v := range vectors {
 		path := ""
 		for _, vv := range v.Vectors {
