@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/pointlander/gradient/tf32"
+	"github.com/pointlander/shakespeare/vector"
 
 	"github.com/alixaxel/pagerank"
 )
@@ -51,6 +52,8 @@ const (
 )
 
 var (
+	// FlagVDB is the vector database mode
+	FlagVDB = flag.Bool("vdb", false, "vector database mode")
 	// FlagVectors build vector db
 	FlagVectors = flag.Bool("vectors", false, "build vector db")
 	// FlagPrompt the prompt to use
@@ -421,6 +424,95 @@ func main() {
 		in = append(in, byte(symbols[v]))
 	}
 	fmt.Println(s)
+
+	if *FlagVDB {
+		var m Mix
+		if *FlagMixer == "filtered" {
+			m = NewFiltered()
+		} else {
+			m = NewMixer()
+		}
+
+		type Vector struct {
+			Vector [InputSize]float32
+			Counts [256]uint32
+		}
+		var vectors [8 * 1024]Vector
+		for i := range vectors {
+			for j := range vectors[i].Vector {
+				vectors[i].Vector[j] = rng.Float32()
+			}
+			l := sqrt(vector.Dot(vectors[i].Vector[:], vectors[i].Vector[:]))
+			for j := range vectors[i].Vector {
+				vectors[i].Vector[j] /= l
+			}
+		}
+
+		m.Add(0)
+		type Result struct {
+			Index  int
+			Symbol byte
+		}
+		done := make(chan Result, 8)
+		cpus := runtime.NumCPU()
+		process := func(v byte, query [InputSize]float32) {
+			max, index := float32(0.0), 0
+			for i := range vectors {
+				cs := CS(query[:], vectors[i].Vector[:])
+				if cs > max {
+					max, index = cs, i
+				}
+			}
+			done <- Result{
+				Index:  index,
+				Symbol: v,
+			}
+		}
+		j, flight := 0, 0
+		for j < len(in) && flight < cpus {
+			query := m.Mix()
+			v := in[j]
+			go process(v, query)
+			j++
+			flight++
+			m.Add(v)
+			fmt.Println(float64(j) / float64(len(in)))
+		}
+		for j < len(in) {
+			result := <-done
+			for i := range vectors[result.Index].Counts {
+				if vectors[result.Index].Counts[i] == math.MaxUint32 {
+					for j := range vectors[result.Index].Counts {
+						vectors[result.Index].Counts[j] /= 2
+					}
+					break
+				}
+			}
+			vectors[result.Index].Counts[result.Symbol]++
+			flight--
+
+			query := m.Mix()
+			v := in[j]
+			go process(v, query)
+			j++
+			flight++
+			m.Add(v)
+			fmt.Println(float64(j)/float64(len(in)), result.Index)
+		}
+		for k := 0; k < flight; k++ {
+			result := <-done
+			for i := range vectors[result.Index].Counts {
+				if vectors[result.Index].Counts[i] == math.MaxUint32 {
+					for j := range vectors[result.Index].Counts {
+						vectors[result.Index].Counts[j] /= 2
+					}
+					break
+				}
+			}
+			vectors[result.Index].Counts[result.Symbol]++
+		}
+		return
+	}
 
 	if *FlagInfer != "" {
 		Infer(symbols, isymbols)
