@@ -207,7 +207,7 @@ func (f Filtered) Add(s byte) {
 
 // Mix mixes the filters outputting a matrix
 func (f Filtered) Mix() [InputSize]float32 {
-	x := NewMatrix(256, Size)
+	x := NewMatrix(256, Size+Order+1)
 	for i := range f.Filters {
 		model := f.Filters[i].GetModel()
 		last, sum := uint16(0), float32(0.0)
@@ -220,6 +220,11 @@ func (f Filtered) Mix() [InputSize]float32 {
 			x.Data = append(x.Data, float32(v-last)/sum)
 			last = v
 		}
+	}
+	for _, v := range f.Markov {
+		d := make([]float32, 256)
+		d[v] = 1
+		x.Data = append(x.Data, d...)
 	}
 	return SelfAttention(x)
 }
@@ -270,7 +275,7 @@ func (m *Mixer) Add(s byte) {
 
 // Mix mixes the histograms outputting a matrix
 func (m Mixer) Mix() [InputSize]float32 {
-	x := NewMatrix(256, Size)
+	x := NewMatrix(256, Size+Order+1)
 	for i := range m.Histograms {
 		sum := float32(0.0)
 		for _, v := range m.Histograms[i].Vector {
@@ -279,6 +284,11 @@ func (m Mixer) Mix() [InputSize]float32 {
 		for _, v := range m.Histograms[i].Vector {
 			x.Data = append(x.Data, float32(v)/sum)
 		}
+	}
+	for _, v := range m.Markov {
+		d := make([]float32, 256)
+		d[v] = 1
+		x.Data = append(x.Data, d...)
 	}
 	return SelfAttention(x)
 }

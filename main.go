@@ -46,7 +46,7 @@ const (
 
 const (
 	// InputSize is the size of the input
-	InputSize = Size * 256
+	InputSize = (Size + Order + 1) * 256
 	// BatchSize is the size of a batch
 	BatchSize = 100
 )
@@ -155,7 +155,7 @@ func Infer(symbols map[rune]int, isymbols map[int]rune) {
 	}
 
 	others := tf32.NewSet()
-	others.Add("input", 8*256)
+	others.Add("input", InputSize)
 	input := others.ByName["input"]
 	input.X = input.X[:cap(input.X)]
 	l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
@@ -215,7 +215,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	}
 
 	type Vector struct {
-		Vector [8 * 256]float32
+		Vector [InputSize]float32
 		Symbol int
 	}
 
@@ -227,7 +227,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	done := make(chan Vectors, 8)
 	process := func(seed int64) {
 		others := tf32.NewSet()
-		others.Add("input", 8*256)
+		others.Add("input", InputSize)
 		input := others.ByName["input"]
 		input.X = input.X[:cap(input.X)]
 		l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
@@ -327,7 +327,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 				}
 
 				others := tf32.NewSet()
-				others.Add("input", 8*256)
+				others.Add("input", InputSize)
 				input := others.ByName["input"]
 				input.X = input.X[:cap(input.X)]
 				l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
@@ -607,13 +607,13 @@ func main() {
 	}
 
 	others := tf32.NewSet()
-	others.Add("input", 8*256, BatchSize)
+	others.Add("input", InputSize, BatchSize)
 	others.Add("output", 3*len(symbols), BatchSize)
 	input, output := others.ByName["input"], others.ByName["output"]
 	input.X = input.X[:cap(input.X)]
 	output.X = output.X[:cap(output.X)]
 	set := tf32.NewSet()
-	set.Add("w0", 8*256, 8*len(symbols))
+	set.Add("w0", InputSize, 8*len(symbols))
 	set.Add("b0", 8*len(symbols))
 	set.Add("w1", 16*len(symbols), 8*len(symbols))
 	set.Add("b1", 8*len(symbols))
@@ -674,7 +674,7 @@ func main() {
 
 		for j := 0; j < BatchSize; j++ {
 			vector := get(rng.Intn(len(in) - 2))
-			copy(input.X[j*8*256:(j+1)*8*256], vector.Vector[:])
+			copy(input.X[j*InputSize:(j+1)*InputSize], vector.Vector[:])
 			for k := 0; k < 3*len(symbols); k++ {
 				output.X[j*3*len(symbols)+k] = 0
 			}
