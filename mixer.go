@@ -166,6 +166,7 @@ func (h *Histogram) Add(s byte) {
 
 // Filtered is a filtered counter
 type Filtered struct {
+	Markov  Markov
 	Filters []Filtered16
 }
 
@@ -188,6 +189,7 @@ func (f Filtered) Copy() Mix {
 		filters[i] = f.Filters[i].Copy()
 	}
 	return &Filtered{
+		Markov:  f.Markov,
 		Filters: filters,
 	}
 }
@@ -197,6 +199,10 @@ func (f Filtered) Add(s byte) {
 	for i := range f.Filters {
 		f.Filters[i].Update(uint16(s))
 	}
+	for k := Order; k > 0; k-- {
+		f.Markov[k] = f.Markov[k-1]
+	}
+	f.Markov[0] = s
 }
 
 // Mix mixes the filters outputting a matrix
