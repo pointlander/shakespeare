@@ -304,10 +304,10 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 		vectors[node].Rank = rank
 	})
 	sort.Slice(vectors, func(i, j int) bool {
-		return vectors[i].Rank > vectors[j].Rank
+		return vectors[i].Rank < vectors[j].Rank
 	})
 
-	for i := 0; i < 33; i++ {
+	/*for i := 0; i < 33; i++ {
 		for j := range vectors {
 			for k := 0; k < 8; k++ {
 				vector := Vectors{
@@ -386,7 +386,7 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 
 	sort.Slice(vectors, func(i, j int) bool {
 		return vectors[i].Rank < vectors[j].Rank
-	})
+	})*/
 
 	for _, v := range vectors {
 		path := ""
