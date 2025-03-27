@@ -489,6 +489,7 @@ func main() {
 			}
 			m[cp[0].Index].Mixer = cp[0].Mixer
 			fmt.Printf("%c", isymbols[int(m[cp[0].Index].Vectors[index].Symbol)])
+			m[cp[0].Index].Vectors[index].Symbol = v
 		}
 	}
 
