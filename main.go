@@ -401,6 +401,116 @@ func Reason(symbols map[rune]int, isymbols map[int]rune) {
 	}
 }
 
+// RL rl mode
+func RL(s int, in []byte, symbols map[rune]int, isymbols map[int]rune) {
+	rng := rand.New(rand.NewSource(1))
+	type Vec struct {
+		Symbol byte
+		Vector [InputSize]float32
+	}
+	type CC struct {
+		Mixer   Mix
+		Vectors [1024]Vec
+	}
+	var m [33]CC
+	for i := range m {
+		if *FlagMixer == "filtered" {
+			m[i].Mixer = NewFiltered()
+		} else {
+			m[i].Mixer = NewMixer()
+		}
+	}
+	for i := range m {
+		symbol := byte(0)
+		m[i].Mixer.Add(symbol)
+		for j := range m[i].Vectors {
+			m[i].Vectors[j].Vector = m[i].Mixer.Mix()
+			m[i].Vectors[j].Symbol = symbol
+			symbol = byte(rng.Intn(s))
+			m[i].Mixer.Add(symbol)
+		}
+	}
+	type Vector struct {
+		Index  int
+		Mixer  Mix
+		Vector [InputSize]float32
+		Rank   float64
+	}
+	for _, v := range in[:8*1024] {
+		cp := [33]Vector{}
+		for j := range m {
+			cp[j].Index = j
+			cp[j].Mixer = m[j].Mixer.Copy()
+			cp[j].Vector = cp[j].Mixer.Mix()
+			cp[j].Mixer.Add(v)
+		}
+		graph := pagerank.NewGraph()
+		for j := 0; j < len(cp); j++ {
+			for k := 0; k < len(cp); k++ {
+				graph.Link(uint32(j), uint32(k), float64(CS(cp[j].Vector[:], cp[k].Vector[:])))
+			}
+		}
+		graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+			cp[node].Rank = rank
+		})
+		sort.Slice(cp[:], func(i, j int) bool {
+			return cp[i].Rank > cp[j].Rank
+		})
+		max, index := float32(0.0), 0
+		for i := range m[cp[0].Index].Vectors {
+			cs := CS(m[cp[0].Index].Vectors[i].Vector[:], cp[0].Vector[:])
+			if cs > max {
+				max, index = cs, i
+			}
+		}
+		m[cp[0].Index].Mixer = cp[0].Mixer
+		fmt.Printf("%c", isymbols[int(m[cp[0].Index].Vectors[index].Symbol)])
+		m[cp[0].Index].Vectors[index].Vector = cp[0].Vector
+		m[cp[0].Index].Vectors[index].Symbol = v
+	}
+	fmt.Println()
+	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+	for i := 0; i < 8*1024; i++ {
+		cp := [33]Vector{}
+		for j := range m {
+			cp[j].Index = j
+			cp[j].Mixer = m[j].Mixer.Copy()
+			cp[j].Vector = cp[j].Mixer.Mix()
+		}
+		graph := pagerank.NewGraph()
+		for j := 0; j < len(cp); j++ {
+			for k := 0; k < len(cp); k++ {
+				graph.Link(uint32(j), uint32(k), float64(CS(cp[j].Vector[:], cp[k].Vector[:])))
+			}
+		}
+		graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+			cp[node].Rank = rank
+		})
+		sort.Slice(cp[:], func(i, j int) bool {
+			return cp[i].Rank > cp[j].Rank
+		})
+		sum, selected, sample := 0.0, rng.Float64(), 0
+		for i := range cp {
+			sum += cp[i].Rank
+			if selected < sum {
+				sample = i
+				break
+			}
+		}
+		max, index := float32(0.0), 0
+		for i := range m[cp[sample].Index].Vectors {
+			cs := CS(m[cp[sample].Index].Vectors[i].Vector[:], cp[sample].Vector[:])
+			if cs > max {
+				max, index = cs, i
+			}
+		}
+		symbol := m[cp[sample].Index].Vectors[index].Symbol
+		cp[sample].Mixer.Add(symbol)
+		m[cp[sample].Index].Mixer = cp[sample].Mixer
+		fmt.Printf("%c", isymbols[int(symbol)])
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -428,111 +538,7 @@ func main() {
 	fmt.Println(s)
 
 	if *FlagRL {
-		type Vec struct {
-			Symbol byte
-			Vector [InputSize]float32
-		}
-		type CC struct {
-			Mixer   Mix
-			Vectors [1024]Vec
-		}
-		var m [33]CC
-		for i := range m {
-			if *FlagMixer == "filtered" {
-				m[i].Mixer = NewFiltered()
-			} else {
-				m[i].Mixer = NewMixer()
-			}
-		}
-		for i := range m {
-			symbol := byte(0)
-			m[i].Mixer.Add(symbol)
-			for j := range m[i].Vectors {
-				m[i].Vectors[j].Vector = m[i].Mixer.Mix()
-				m[i].Vectors[j].Symbol = symbol
-				symbol = byte(rng.Intn(s))
-				m[i].Mixer.Add(symbol)
-			}
-		}
-		type Vector struct {
-			Index  int
-			Mixer  Mix
-			Vector [InputSize]float32
-			Rank   float64
-		}
-		for _, v := range in[:8*1024] {
-			cp := [33]Vector{}
-			for j := range m {
-				cp[j].Index = j
-				cp[j].Mixer = m[j].Mixer.Copy()
-				cp[j].Vector = cp[j].Mixer.Mix()
-				cp[j].Mixer.Add(v)
-			}
-			graph := pagerank.NewGraph()
-			for j := 0; j < len(cp); j++ {
-				for k := 0; k < len(cp); k++ {
-					graph.Link(uint32(j), uint32(k), float64(CS(cp[j].Vector[:], cp[k].Vector[:])))
-				}
-			}
-			graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
-				cp[node].Rank = rank
-			})
-			sort.Slice(cp[:], func(i, j int) bool {
-				return cp[i].Rank > cp[j].Rank
-			})
-			max, index := float32(0.0), 0
-			for i := range m[cp[0].Index].Vectors {
-				cs := CS(m[cp[0].Index].Vectors[i].Vector[:], cp[0].Vector[:])
-				if cs > max {
-					max, index = cs, i
-				}
-			}
-			m[cp[0].Index].Mixer = cp[0].Mixer
-			fmt.Printf("%c", isymbols[int(m[cp[0].Index].Vectors[index].Symbol)])
-			m[cp[0].Index].Vectors[index].Vector = cp[0].Vector
-			m[cp[0].Index].Vectors[index].Symbol = v
-		}
-		fmt.Println()
-		fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-		for i := 0; i < 8*1024; i++ {
-			cp := [33]Vector{}
-			for j := range m {
-				cp[j].Index = j
-				cp[j].Mixer = m[j].Mixer.Copy()
-				cp[j].Vector = cp[j].Mixer.Mix()
-			}
-			graph := pagerank.NewGraph()
-			for j := 0; j < len(cp); j++ {
-				for k := 0; k < len(cp); k++ {
-					graph.Link(uint32(j), uint32(k), float64(CS(cp[j].Vector[:], cp[k].Vector[:])))
-				}
-			}
-			graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
-				cp[node].Rank = rank
-			})
-			sort.Slice(cp[:], func(i, j int) bool {
-				return cp[i].Rank > cp[j].Rank
-			})
-			sum, selected, sample := 0.0, rng.Float64(), 0
-			for i := range cp {
-				sum += cp[i].Rank
-				if selected < sum {
-					sample = i
-					break
-				}
-			}
-			max, index := float32(0.0), 0
-			for i := range m[cp[sample].Index].Vectors {
-				cs := CS(m[cp[sample].Index].Vectors[i].Vector[:], cp[sample].Vector[:])
-				if cs > max {
-					max, index = cs, i
-				}
-			}
-			symbol := m[cp[sample].Index].Vectors[index].Symbol
-			cp[sample].Mixer.Add(symbol)
-			m[cp[sample].Index].Mixer = cp[sample].Mixer
-			fmt.Printf("%c", isymbols[int(symbol)])
-		}
+		RL(s, in, symbols, isymbols)
 		return
 	}
 
