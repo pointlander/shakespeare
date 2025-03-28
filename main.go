@@ -465,8 +465,8 @@ func main() {
 			for j := range m {
 				cp[j].Index = j
 				cp[j].Mixer = m[j].Mixer.Copy()
-				cp[j].Mixer.Add(v)
 				cp[j].Vector = cp[j].Mixer.Mix()
+				cp[j].Mixer.Add(v)
 			}
 			graph := pagerank.NewGraph()
 			for j := 0; j < len(cp); j++ {
@@ -492,14 +492,13 @@ func main() {
 			m[cp[0].Index].Vectors[index].Vector = cp[0].Vector
 			m[cp[0].Index].Vectors[index].Symbol = v
 		}
+		fmt.Println()
 		fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-		symbol := 0
 		for i := 0; i < 8*1024; i++ {
 			cp := [33]Vector{}
 			for j := range m {
 				cp[j].Index = j
 				cp[j].Mixer = m[j].Mixer.Copy()
-				cp[j].Mixer.Add(byte(symbol))
 				cp[j].Vector = cp[j].Mixer.Mix()
 			}
 			graph := pagerank.NewGraph()
@@ -529,9 +528,10 @@ func main() {
 					max, index = cs, i
 				}
 			}
+			symbol := m[cp[sample].Index].Vectors[index].Symbol
+			cp[sample].Mixer.Add(symbol)
 			m[cp[sample].Index].Mixer = cp[sample].Mixer
-			fmt.Printf("%c", isymbols[int(m[cp[sample].Index].Vectors[index].Symbol)])
-			symbol = int(m[cp[sample].Index].Vectors[index].Symbol)
+			fmt.Printf("%c", isymbols[int(symbol)])
 		}
 		return
 	}
