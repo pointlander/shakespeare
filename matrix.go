@@ -187,6 +187,32 @@ func SelfAttention(input Matrix) [InputSize]float32 {
 	return output
 }
 
+// CrossSelfAttention computes the cross self attention of a b
+func CrossSelfAttention(a, b Matrix) [InputSize]float32 {
+	values := make([]float32, a.Rows)
+	V := a.T()
+	output, index := [InputSize]float32{}, 0
+	for i := 0; i < a.Rows; i++ {
+		K := a.Data[i*a.Cols : (i+1)*a.Cols]
+		for j := 0; j < b.Rows; j++ {
+			Q := b.Data[j*b.Cols : (j+1)*b.Cols]
+			values[j] = vector.Dot(K, Q)
+		}
+		softmax(values)
+
+		for j := 0; j < V.Rows; j++ {
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			output[index] = vector.Dot(values, V)
+			index++
+		}
+	}
+	aa := sqrt(vector.Dot(output[:], output[:]))
+	for i, v := range output {
+		output[i] = v / aa
+	}
+	return output
+}
+
 // CS is float32 cosine similarity
 func CS(a []float32, b []float32) float32 {
 	return vector.Dot(a, b)

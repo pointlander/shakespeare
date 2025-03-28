@@ -31,6 +31,13 @@ type Mix interface {
 	Mix() [InputSize]float32
 }
 
+// Mix is a mixer
+type CrossMix interface {
+	Copy() CrossMix
+	Add(byte, byte)
+	Mix() [InputSize]float32
+}
+
 type CDF16 struct {
 	Size   int
 	Rate   int
@@ -229,6 +236,86 @@ func (f Filtered) Mix() [InputSize]float32 {
 	return SelfAttention(x)
 }
 
+// Filtered is a filtered counter
+type CrossFiltered struct {
+	Markov  [2]Markov
+	Filters [2][]Filtered16
+}
+
+// NewCrossFiltered makes a new cross filtered counter
+func NewCrossFiltered() *CrossFiltered {
+	cdf := NewCDF16(false)
+	filters := [2][]Filtered16{}
+	for i := range filters {
+		filters[i] = make([]Filtered16, Size)
+		for j := range filters[i] {
+			filters[i][j] = cdf(256, i+1)
+		}
+	}
+	return &CrossFiltered{
+		Filters: filters,
+	}
+}
+
+// Copy copies the filter
+func (f CrossFiltered) Copy() CrossMix {
+	filters := [2][]Filtered16{}
+	for i := range filters {
+		filters[i] = make([]Filtered16, len(f.Filters))
+		for j := range filters[i] {
+			filters[i][j] = f.Filters[i][j].Copy()
+		}
+	}
+	return &CrossFiltered{
+		Markov:  f.Markov,
+		Filters: filters,
+	}
+}
+
+// Add adds a symbol to a filter
+func (f CrossFiltered) Add(s1, s2 byte) {
+	for i := range f.Filters[0] {
+		f.Filters[0][i].Update(uint16(s1))
+	}
+	for k := Order; k > 0; k-- {
+		f.Markov[0][k] = f.Markov[0][k-1]
+	}
+	f.Markov[0][0] = s1
+	for i := range f.Filters[1] {
+		f.Filters[1][i].Update(uint16(s2))
+	}
+	for k := Order; k > 0; k-- {
+		f.Markov[1][k] = f.Markov[1][k-1]
+	}
+	f.Markov[1][0] = s2
+}
+
+// Mix mixes the filters outputting a matrix
+func (f CrossFiltered) Mix() [InputSize]float32 {
+	x := [2]Matrix{NewMatrix(256, Size+Order+1), NewMatrix(256, Size+Order+1)}
+	for i := range x {
+		for j := range f.Filters[i] {
+			model := f.Filters[i][j].GetModel()
+			last, sum := uint16(0), float32(0.0)
+			for _, v := range model[1:] {
+				sum += float32(v - last)
+				last = v
+			}
+			last = 0
+			for _, v := range model[1:] {
+				x[i].Data = append(x[i].Data, float32(v-last)/sum)
+				last = v
+			}
+		}
+		for _, v := range f.Markov[i] {
+			d := make([]float32, 256)
+			d[v] = 1
+			x[i].Data = append(x[i].Data, d...)
+		}
+	}
+	return CrossSelfAttention(x[0], x[1])
+}
+
 // Mixer mixes several histograms together
 type Mixer struct {
 	Markov     Markov
@@ -291,4 +378,84 @@ func (m Mixer) Mix() [InputSize]float32 {
 		x.Data = append(x.Data, d...)
 	}
 	return SelfAttention(x)
+}
+
+// CrossMixer mixes several histograms together
+type CrossMixer struct {
+	Markov     [2]Markov
+	Histograms [2][]Histogram
+}
+
+// NewCrossMixer makes a new cross mixer
+func NewCrossMixer() *CrossMixer {
+	histograms := [2][]Histogram{}
+	for i := range histograms {
+		histograms[i] = make([]Histogram, Size)
+		histograms[i][0] = NewHistogram(1)
+		histograms[i][1] = NewHistogram(2)
+		histograms[i][2] = NewHistogram(4)
+		histograms[i][3] = NewHistogram(8)
+		histograms[i][4] = NewHistogram(16)
+		histograms[i][5] = NewHistogram(32)
+		histograms[i][6] = NewHistogram(64)
+		histograms[i][7] = NewHistogram(128)
+	}
+	return &CrossMixer{
+		Histograms: histograms,
+	}
+}
+
+// Copy copies a cross mixer
+func (m CrossMixer) Copy() CrossMix {
+	histograms := [2][]Histogram{}
+	for i := range histograms {
+		histograms[i] = make([]Histogram, Size)
+		for j := range m.Histograms[i] {
+			histograms[i][j] = m.Histograms[i][j]
+		}
+	}
+	return &CrossMixer{
+		Markov:     m.Markov,
+		Histograms: histograms,
+	}
+}
+
+// Add adds a symbol to a cross mixer
+func (m *CrossMixer) Add(s1, s2 byte) {
+	for i := range m.Histograms[0] {
+		m.Histograms[0][i].Add(s1)
+	}
+	for k := Order; k > 0; k-- {
+		m.Markov[0][k] = m.Markov[0][k-1]
+	}
+	m.Markov[0][0] = s1
+	for i := range m.Histograms[1] {
+		m.Histograms[1][i].Add(s2)
+	}
+	for k := Order; k > 0; k-- {
+		m.Markov[1][k] = m.Markov[1][k-1]
+	}
+	m.Markov[1][0] = s2
+}
+
+// Mix mixes the histograms outputting a matrix
+func (m CrossMixer) Mix() [InputSize]float32 {
+	x := [2]Matrix{NewMatrix(256, Size+Order+1), NewMatrix(256, Size+Order+1)}
+	for i := range x {
+		for j := range m.Histograms[i] {
+			sum := float32(0.0)
+			for _, v := range m.Histograms[i][j].Vector {
+				sum += float32(v)
+			}
+			for _, v := range m.Histograms[i][j].Vector {
+				x[i].Data = append(x[i].Data, float32(v)/sum)
+			}
+		}
+		for _, v := range m.Markov[i] {
+			d := make([]float32, 256)
+			d[v] = 1
+			x[i].Data = append(x[i].Data, d...)
+		}
+	}
+	return CrossSelfAttention(x[0], x[1])
 }
