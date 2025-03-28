@@ -460,7 +460,7 @@ func main() {
 			Vector [InputSize]float32
 			Rank   float64
 		}
-		for _, v := range in {
+		for _, v := range in[:8*1024] {
 			cp := [33]Vector{}
 			for j := range m {
 				cp[j].Index = j
@@ -489,8 +489,51 @@ func main() {
 			}
 			m[cp[0].Index].Mixer = cp[0].Mixer
 			fmt.Printf("%c", isymbols[int(m[cp[0].Index].Vectors[index].Symbol)])
+			m[cp[0].Index].Vectors[index].Vector = cp[0].Vector
 			m[cp[0].Index].Vectors[index].Symbol = v
 		}
+		fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+		symbol := 0
+		for i := 0; i < 8*1024; i++ {
+			cp := [33]Vector{}
+			for j := range m {
+				cp[j].Index = j
+				cp[j].Mixer = m[j].Mixer.Copy()
+				cp[j].Mixer.Add(byte(symbol))
+				cp[j].Vector = cp[j].Mixer.Mix()
+			}
+			graph := pagerank.NewGraph()
+			for j := 0; j < len(cp); j++ {
+				for k := 0; k < len(cp); k++ {
+					graph.Link(uint32(j), uint32(k), float64(CS(cp[j].Vector[:], cp[k].Vector[:])))
+				}
+			}
+			graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+				cp[node].Rank = rank
+			})
+			sort.Slice(cp[:], func(i, j int) bool {
+				return cp[i].Rank > cp[j].Rank
+			})
+			sum, selected, sample := 0.0, rng.Float64(), 0
+			for i := range cp {
+				sum += cp[i].Rank
+				if selected < sum {
+					sample = i
+					break
+				}
+			}
+			max, index := float32(0.0), 0
+			for i := range m[cp[sample].Index].Vectors {
+				cs := CS(m[cp[sample].Index].Vectors[i].Vector[:], cp[sample].Vector[:])
+				if cs > max {
+					max, index = cs, i
+				}
+			}
+			m[cp[sample].Index].Mixer = cp[sample].Mixer
+			fmt.Printf("%c", isymbols[int(m[cp[sample].Index].Vectors[index].Symbol)])
+			symbol = int(m[cp[sample].Index].Vectors[index].Symbol)
+		}
+		return
 	}
 
 	if *FlagVDB {
