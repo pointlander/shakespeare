@@ -58,6 +58,12 @@ var (
 	FlagVDB = flag.Bool("vdb", false, "vector database mode")
 	// FlagVectors build vector db
 	FlagVectors = flag.Bool("vectors", false, "build vector db")
+	// FlagVectors2 build vector db
+	FlagVectors2 = flag.String("vectors2", "", "build vector2 db")
+	// FlagTrain is the file to train on
+	FlagTrain = flag.String("train", "vectors.bin", "vectors to train on")
+	// FlagOutput is the output file for training
+	FlagOutput = flag.String("output", "set.bin", "output file for training")
 	// FlagPrompt the prompt to use
 	FlagPrompt = flag.String("prompt", "Hello World!", "the prompt to use")
 	// FlagCount the number of symbols to generate
@@ -687,11 +693,101 @@ func main() {
 		return
 	}
 
+	if *FlagVectors2 != "" {
+		rng := rand.New(rand.NewSource(1))
+
+		db, err := os.Create("vectors2.bin")
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+
+		var m Mix
+		if *FlagMixer == "filtered" {
+			m = NewFiltered()
+		} else {
+			m = NewMixer()
+		}
+		var m2 CrossMix
+		if *FlagMixer == "filtered" {
+			m2 = NewCrossFiltered()
+		} else {
+			m2 = NewCrossMixer()
+		}
+		for _, v := range []rune(*FlagPrompt) {
+			m.Add(byte(symbols[v]))
+		}
+		set := tf32.NewSet()
+		_, _, err = set.Open(*FlagVectors2)
+		if err != nil {
+			panic(err)
+		}
+
+		others := tf32.NewSet()
+		others.Add("input", InputSize)
+		input := others.ByName["input"]
+		input.X = input.X[:cap(input.X)]
+		l0 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w0"), others.Get("input")), set.Get("b0")))
+		l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), l0), set.Get("b1")))
+		l2 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+		l3 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+		l4 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w4"), l3), set.Get("b4")))
+		l5 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w5"), l4), set.Get("b5")))
+		l6 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w6"), l5), set.Get("b6")))
+		l7 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w7"), l6), set.Get("b7")))
+
+		m.Add(0)
+		m2.Add(0, 0)
+		for i, s := range in[:len(in)-2] {
+			q := m.Mix()
+			vector := m2.Mix()
+			buffer32 := make([]byte, 4)
+			for _, v := range vector {
+				bits := math.Float32bits(v)
+				for i := range buffer32 {
+					buffer32[i] = byte((bits >> (8 * i)) & 0xFF)
+				}
+				n, err := db.Write(buffer32)
+				if err != nil {
+					panic(err)
+				}
+				if n != len(buffer32) {
+					panic("4 bytes should be been written")
+				}
+			}
+			n, err := db.Write(in[i : i+3])
+			if err != nil {
+				panic(err)
+			}
+			if n != 3 {
+				panic("3 bytes should be been written")
+			}
+			copy(input.X, q[:])
+			l7(func(a *tf32.V) bool {
+				aa := a.X[:len(symbols)]
+				sum := float32(0.0)
+				for _, v := range aa {
+					sum += v
+				}
+				selection, total := rng.Float32(), float32(0.0)
+				for i, v := range aa {
+					total += v / sum
+					if selection < total {
+						m2.Add(byte(i), s)
+						return true
+					}
+				}
+				return true
+			})
+			m.Add(s)
+		}
+	}
+
 	type Vector struct {
 		Vector [InputSize]float32
 		Symbol [3]byte
 	}
-	vectors, err := os.Open("vectors.bin")
+	vectors, err := os.Open(*FlagTrain)
 	if err != nil {
 		panic(err)
 	}
@@ -837,5 +933,5 @@ func main() {
 		}
 		fmt.Println(i, cost)
 	}
-	set.Save("set.bin", cost, iterations)
+	set.Save(*FlagOutput, cost, iterations)
 }
