@@ -59,3 +59,21 @@ func TestFiltered(t *testing.T) {
 		t.Fatalf("%f < %f", j, i)
 	}
 }
+
+func TestCrossFiltered(t *testing.T) {
+	a := NewCrossFiltered()
+	a.Add(1, 1)
+	a.Add(1, 1)
+	b := NewCrossFiltered()
+	b.Add(1, 1)
+	c := NewCrossFiltered()
+	c.Add(1, 1)
+	x := a.Mix()
+	y := b.Mix()
+	z := c.Mix()
+	i := NCS(z[:], x[:])
+	j := NCS(z[:], y[:])
+	if j < i {
+		t.Fatalf("%f < %f", j, i)
+	}
+}
