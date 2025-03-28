@@ -781,6 +781,7 @@ func main() {
 			})
 			m.Add(s)
 		}
+		return
 	}
 
 	type Vector struct {
